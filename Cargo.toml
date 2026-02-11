@@ -1,0 +1,61 @@
+[package]
+name = "skills-cookbook-relay"
+version = "0.1.0"
+description = "Local relay for Runwaize Skills Cookbook - secure skill delivery via MCP"
+authors = ["SUPERVAIZE Team"]
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "devtools", "tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+ring = "0.17"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+sha2 = "0.10"
+hex = "0.4"
+uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "5"
+parking_lot = "0.12"
+
+# OAuth and authentication
+oauth2 = "4"
+
+# MCP server
+async-trait = "0.1"
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Keychain/secure storage
+keyring = "2"
+
+# Configuration
+config = { version = "0.14", features = ["toml"] }
+toml = "0.8"
+
+# Cache
+sled = "0.34"
+bincode = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[[bin]]
+name = "skills-cookbook-relay"
+path = "src/main.rs"

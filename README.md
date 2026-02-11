@@ -1,0 +1,360 @@
+# Skills Cookbook Relay
+
+Local relay for Runwaize Skills Cookbook - A secure skill delivery system via MCP (Model Context Protocol).
+
+## Overview
+
+Skills Cookbook Relay is a lightweight desktop application that acts as a secure bridge between your AI agents and the Runwaize Skills Cookbook. It ensures you always have access to the latest approved skills without storing sensitive credentials in your agent runtime.
+
+### Key Features
+
+- 🔐 **Secure Authentication** - OAuth device flow with OS keychain storage
+- ✅ **Cryptographic Verification** - All skills are signed and verified before use
+- 🔄 **Always Up-to-Date** - Automatic background sync for latest approved versions
+- 🔑 **Secret Management** - Resolves credentials from keychain, environment, or 1Password
+- 🚀 **MCP Server** - Exposes skills via standardized Model Context Protocol
+- 💾 **Smart Caching** - Local artifact cache with integrity verification
+- 🎨 **Native UI** - System tray app with dashboard for monitoring
+
+## Architecture
+
+```
+┌─────────────────┐
+│   AI Agent      │ (Claude, OpenClaw, etc.)
+│   (MCP Client)  │
+└────────┬────────┘
+         │ MCP Protocol (localhost:9876)
+         │
+┌────────▼────────────────────────────────┐
+│  Skills Cookbook Relay (Tauri + Rust)   │
+│  ┌──────────────────────────────────┐   │
+│  │  MCP Server                      │   │
+│  │  ├─ skills.list, skills.get      │   │
+│  │  └─ libraries.list, status       │   │
+│  ├──────────────────────────────────┤   │
+│  │  Artifact Cache & Verification   │   │
+│  │  ├─ Signature verification       │   │
+│  │  ├─ Hash checking                │   │
+│  │  └─ Revocation handling          │   │
+│  ├──────────────────────────────────┤   │
+│  │  Variable Resolver               │   │
+│  │  ├─ OS Keychain                  │   │
+│  │  ├─ Environment variables        │   │
+│  │  └─ 1Password CLI (optional)     │   │
+│  └──────────────────────────────────┘   │
+└────────┬────────────────────────────────┘
+         │ HTTPS + OAuth
+         │
+┌────────▼────────────────────────────────┐
+│  Runwaize Skills Cookbook (RSS API)     │
+│  ├─ Signed skill artifacts              │
+│  ├─ Library management                  │
+│  └─ Version control & approval          │
+└─────────────────────────────────────────┘
+```
+
+## Installation
+
+### Prerequisites
+
+- macOS 10.15+ (Windows/Linux support coming soon)
+- Rust 1.70+ (for building from source)
+
+### Option 1: Install from Release (Recommended)
+
+1. Download the latest `.dmg` from [Releases](https://github.com/SUPERVAIZE/skillsstudiorelay/releases)
+2. Open the DMG and drag Skills Cookbook Relay to Applications
+3. Launch the app from Applications or Spotlight
+
+### Option 2: Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/SUPERVAIZE/skillsstudiorelay.git
+cd skillsstudiorelay
+
+# Install dependencies
+cargo build --release
+
+# Run the application
+cargo run --release
+```
+
+## Quick Start
+
+### 1. Launch the Relay
+
+Open Skills Cookbook Relay from your Applications folder. The app will:
+- Start the MCP server on `localhost:9876`
+- Show a system tray icon
+- Display the dashboard window
+
+### 2. Connect Your Account
+
+1. Click "Connect Account" in the dashboard
+2. Visit the provided URL in your browser
+3. Enter the displayed code
+4. Authorize the relay to access your Skills Cookbook account
+
+### 3. Configure Your Agent
+
+Add the relay to your AI agent's MCP configuration:
+
+#### For Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "skills-cookbook": {
+      "url": "http://localhost:9876",
+      "type": "http"
+    }
+  }
+}
+```
+
+#### For OpenClaw
+
+Edit your OpenClaw configuration:
+
+```yaml
+mcp_servers:
+  - name: skills-cookbook
+    url: http://localhost:9876
+    enabled: true
+```
+
+### 4. Use Skills in Your Agent
+
+Once configured, your agent can access skills:
+
+```
+User: "List available skills from my cookbook"
+Agent: [Uses skills.list MCP method]
+
+User: "Run the data-analysis skill on my CSV"
+Agent: [Uses skills.get to fetch verified skill]
+```
+
+## Configuration
+
+Configuration file location:
+- **macOS**: `~/Library/Application Support/skills-cookbook-relay/config.toml`
+- **Linux**: `~/.config/skills-cookbook-relay/config.toml`
+- **Windows**: `%APPDATA%\skills-cookbook-relay\config.toml`
+
+### Example Configuration
+
+```toml
+rss_api_url = "https://api.skills.cookbook/v1"
+oauth_client_id = "skills-relay-client"
+oauth_auth_url = "https://auth.skills.cookbook/oauth/authorize"
+oauth_token_url = "https://auth.skills.cookbook/oauth/token"
+
+mcp_server_host = "127.0.0.1"
+mcp_server_port = 9876
+mcp_enable_stdio = true
+
+cache_dir = "~/.cache/skills-cookbook-relay"
+cache_max_size_mb = 500
+cache_ttl_hours = 24
+
+sync_interval_minutes = 15
+verification_required = true
+fail_closed_on_verification_error = true
+
+log_level = "info"
+debug_mode = false
+
+default_libraries = []
+update_mode = "latest_approved"
+```
+
+## Secret Management
+
+The relay resolves variables and secrets in the following order:
+
+1. **Project scope** (highest priority)
+2. **Workspace scope**
+3. **Personal scope**
+4. **Default values** (from skill schema)
+
+### Storing Secrets
+
+```bash
+# The relay stores secrets in OS keychain automatically
+# You can also set them via environment variables:
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Or use 1Password CLI references:
+# op://vault/item/field
+```
+
+## MCP Methods
+
+The relay exposes these MCP methods:
+
+### `skills.list`
+List available skills, optionally filtered by library.
+
+**Parameters:**
+- `library_id` (optional): Filter by library ID
+
+**Returns:** Array of skill summaries
+
+### `skills.get`
+Get a specific skill with resolved variables.
+
+**Parameters:**
+- `skill_id` or `slug`: Skill identifier
+- `version` (optional): Version to fetch (default: "latest_approved")
+
+**Returns:** Complete artifact with metadata and payload
+
+### `libraries.list`
+List all accessible libraries.
+
+**Returns:** Array of libraries with metadata
+
+### `libraries.get`
+Get a specific library.
+
+**Parameters:**
+- `library_id`: Library identifier
+- `release` (optional): Release version (default: "latest_approved")
+
+### `skills.status`
+Get relay status information.
+
+**Returns:** Status object with cache, sync, and connection info
+
+### `skills.refresh`
+Force refresh skills from Skills Cookbook.
+
+**Returns:** Refresh result with update counts
+
+## Security
+
+### Cryptographic Verification
+
+Every skill artifact is:
+1. **Signed** by Skills Cookbook using RSA or ED25519
+2. **Hash-verified** using SHA-256
+3. **Approval-checked** to ensure it's in published state
+4. **Revocation-checked** before serving
+
+If verification fails, the relay **fails closed** and refuses to serve the artifact.
+
+### Token Storage
+
+- Access tokens are stored in OS keychain (macOS Keychain, Windows Credential Manager)
+- Refresh tokens are encrypted at rest
+- Tokens are never written to logs or exposed to agents
+
+### Network Security
+
+- All communication with Skills Cookbook uses HTTPS with TLS 1.3
+- MCP server binds only to `127.0.0.1` (localhost)
+- No inbound connections from external networks
+
+## Troubleshooting
+
+### Relay won't start
+
+Check the logs:
+```bash
+tail -f ~/Library/Logs/skills-cookbook-relay/relay.log
+```
+
+### Authentication fails
+
+1. Check your internet connection
+2. Clear tokens: Click "Wipe All Data" in dashboard
+3. Try logging in again
+
+### Skills not updating
+
+1. Check "Last Sync" in dashboard
+2. Click "Force Refresh"
+3. Verify you're authenticated
+
+### MCP connection issues
+
+1. Verify the relay is running (check system tray)
+2. Confirm MCP server port: `lsof -i :9876`
+3. Check agent MCP configuration
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run specific test module
+cargo test crypto_tests
+
+# Run with output
+cargo test -- --nocapture
+```
+
+### Debug Mode
+
+Enable debug logging:
+```toml
+# In config.toml
+debug_mode = true
+log_level = "debug"
+```
+
+Or via environment:
+```bash
+RUST_LOG=debug cargo run
+```
+
+### Project Structure
+
+```
+skillsstudiorelay/
+├── src/
+│   ├── main.rs           # Tauri application entry
+│   ├── lib.rs            # Library exports
+│   ├── auth.rs           # OAuth & token management
+│   ├── cache.rs          # Artifact caching
+│   ├── config.rs         # Configuration
+│   ├── crypto.rs         # Signature verification
+│   ├── error.rs          # Error types
+│   ├── relay.rs          # Core orchestration
+│   ├── rss_client.rs     # API client
+│   ├── types.rs          # Type definitions
+│   ├── variables.rs      # Secret resolution
+│   └── mcp/
+│       ├── mod.rs
+│       ├── server.rs     # MCP HTTP server
+│       └── handlers.rs   # MCP method handlers
+├── ui/
+│   ├── index.html        # Dashboard UI
+│   ├── styles.css
+│   └── app.js
+├── Cargo.toml
+├── tauri.conf.json
+└── README.md
+```
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+Copyright © 2026 SUPERVAIZE Team. All rights reserved.
+
+## Support
+
+- 📧 Email: support@supervaize.com
+- 💬 Discord: [SUPERVAIZE Community](https://discord.gg/supervaize)
+- 🐛 Issues: [GitHub Issues](https://github.com/SUPERVAIZE/skillsstudiorelay/issues)
