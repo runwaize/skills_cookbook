@@ -1,10 +1,10 @@
-# Skills Cookbook Relay
+# Skill Cookbook Relay
 
 Local relay for Runwaize Skills Cookbook - A secure skill delivery system via MCP (Model Context Protocol).
 
 ## Overview
 
-Skills Cookbook Relay is a lightweight desktop application that acts as a secure bridge between your AI agents and the Runwaize Skills Cookbook. It ensures you always have access to the latest approved skills without storing sensitive credentials in your agent runtime.
+Skill Cookbook Relay is a lightweight desktop application that acts as a secure bridge between your AI agents and the Runwaize Skills Cookbook. It ensures you always have access to the latest approved skills without storing sensitive credentials in your agent runtime.
 
 ### Key Features
 
@@ -26,7 +26,7 @@ Skills Cookbook Relay is a lightweight desktop application that acts as a secure
          │ MCP Protocol (localhost:9876)
          │
 ┌────────▼────────────────────────────────┐
-│  Skills Cookbook Relay (Tauri + Rust)   │
+│  Skill Cookbook Relay (Tauri + Rust)   │
 │  ┌──────────────────────────────────┐   │
 │  │  MCP Server                      │   │
 │  │  ├─ skills.list, skills.get      │   │
@@ -62,16 +62,16 @@ Skills Cookbook Relay is a lightweight desktop application that acts as a secure
 
 ### Option 1: Install from Release (Recommended)
 
-1. Download the latest `.dmg` from [Releases](https://github.com/SUPERVAIZE/skillsstudiorelay/releases)
-2. Open the DMG and drag Skills Cookbook Relay to Applications
+1. Download the latest `.dmg` from [Releases](https://github.com/SUPERVAIZE/skill_cookbook/releases)
+2. Open the DMG and drag Skill Cookbook Relay to Applications
 3. Launch the app from Applications or Spotlight
 
 ### Option 2: Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/SUPERVAIZE/skillsstudiorelay.git
-cd skillsstudiorelay
+git clone https://github.com/SUPERVAIZE/skill_cookbook.git
+cd skill_cookbook
 
 # Install dependencies
 cargo build --release
@@ -84,7 +84,7 @@ cargo run --release
 
 ### 1. Launch the Relay
 
-Open Skills Cookbook Relay from your Applications folder. The app will:
+Open Skill Cookbook Relay from your Applications folder. The app will:
 - Start the MCP server on `localhost:9876`
 - Show a system tray icon
 - Display the dashboard window
@@ -107,7 +107,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "skills-cookbook": {
+    "skill-cookbook": {
       "url": "http://localhost:9876",
       "type": "http"
     }
@@ -121,7 +121,7 @@ Edit your OpenClaw configuration:
 
 ```yaml
 mcp_servers:
-  - name: skills-cookbook
+  - name: skill-cookbook
     url: http://localhost:9876
     enabled: true
 ```
@@ -141,9 +141,9 @@ Agent: [Uses skills.get to fetch verified skill]
 ## Configuration
 
 Configuration file location:
-- **macOS**: `~/Library/Application Support/skills-cookbook-relay/config.toml`
-- **Linux**: `~/.config/skills-cookbook-relay/config.toml`
-- **Windows**: `%APPDATA%\skills-cookbook-relay\config.toml`
+- **macOS**: `~/Library/Application Support/skill-cookbook-relay/config.toml`
+- **Linux**: `~/.config/skill-cookbook-relay/config.toml`
+- **Windows**: `%APPDATA%\skill-cookbook-relay\config.toml`
 
 ### Example Configuration
 
@@ -157,7 +157,7 @@ mcp_server_host = "127.0.0.1"
 mcp_server_port = 9876
 mcp_enable_stdio = true
 
-cache_dir = "~/.cache/skills-cookbook-relay"
+cache_dir = "~/.cache/skill-cookbook-relay"
 cache_max_size_mb = 500
 cache_ttl_hours = 24
 
@@ -266,7 +266,7 @@ If verification fails, the relay **fails closed** and refuses to serve the artif
 
 Check the logs:
 ```bash
-tail -f ~/Library/Logs/skills-cookbook-relay/relay.log
+tail -f ~/Library/Logs/skill-cookbook-relay/relay.log
 ```
 
 ### Authentication fails
@@ -319,7 +319,7 @@ RUST_LOG=debug cargo run
 ### Project Structure
 
 ```
-skillsstudiorelay/
+skill_cookbook/
 ├── src/
 │   ├── main.rs           # Tauri application entry
 │   ├── lib.rs            # Library exports
@@ -357,4 +357,4 @@ Copyright © 2026 SUPERVAIZE Team. All rights reserved.
 
 - 📧 Email: support@supervaize.com
 - 💬 Discord: [SUPERVAIZE Community](https://discord.gg/supervaize)
-- 🐛 Issues: [GitHub Issues](https://github.com/SUPERVAIZE/skillsstudiorelay/issues)
+- 🐛 Issues: [GitHub Issues](https://github.com/SUPERVAIZE/skill_cookbook/issues)

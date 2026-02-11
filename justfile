@@ -1,4 +1,4 @@
-# Skills Cookbook Relay - Justfile
+# Skill Cookbook Relay - Justfile
 # Run commands with: just <command>
 
 # Default recipe (show all available commands)
@@ -138,9 +138,9 @@ deps:
 # Check binary size
 size:
     @echo "Debug binary size:"
-    @ls -lh target/debug/skills-cookbook-relay 2>/dev/null || echo "Not built yet"
+    @ls -lh target/debug/skill-cookbook-relay 2>/dev/null || echo "Not built yet"
     @echo "\nRelease binary size:"
-    @ls -lh target/release/skills-cookbook-relay 2>/dev/null || echo "Not built yet"
+    @ls -lh target/release/skill-cookbook-relay 2>/dev/null || echo "Not built yet"
 
 # Benchmark build times
 bench-build:

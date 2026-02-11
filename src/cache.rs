@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub struct ArtifactCache {
-    cache_dir: PathBuf,
+    _cache_dir: PathBuf,
     cache_ttl: Duration,
     max_size_bytes: u64,
     db: sled::Db,
@@ -26,7 +26,7 @@ impl ArtifactCache {
             .map_err(|e| RelayError::Cache(format!("Failed to open cache database: {}", e)))?;
 
         Ok(Self {
-            cache_dir,
+            _cache_dir: cache_dir,
             cache_ttl: Duration::hours(cache_ttl_hours as i64),
             max_size_bytes: (max_size_mb as u64) * 1024 * 1024,
             db,
@@ -165,13 +165,11 @@ impl ArtifactCache {
             // Collect all cached items with timestamps
             let mut items: Vec<(String, DateTime<Utc>)> = Vec::new();
 
-            for item in self.db.iter() {
-                if let Ok((key, value)) = item {
-                    if let Ok(key_str) = std::str::from_utf8(&key) {
-                        if key_str.starts_with("artifact:") {
-                            if let Ok(cached) = bincode::deserialize::<CachedArtifact>(&value) {
-                                items.push((key_str.to_string(), cached.cached_at));
-                            }
+            for (key, value) in self.db.iter().flatten() {
+                if let Ok(key_str) = std::str::from_utf8(&key) {
+                    if key_str.starts_with("artifact:") {
+                        if let Ok(cached) = bincode::deserialize::<CachedArtifact>(&value) {
+                            items.push((key_str.to_string(), cached.cached_at));
                         }
                     }
                 }
@@ -222,6 +220,7 @@ impl ArtifactCache {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct CacheStats {
     pub size_bytes: u64,
     pub artifact_count: usize,

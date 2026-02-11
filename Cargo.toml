@@ -1,5 +1,5 @@
 [package]
-name = "skills-cookbook-relay"
+name = "skill-cookbook-relay"
 version = "0.1.0"
 description = "Local relay for Runwaize Skills Cookbook - secure skill delivery via MCP"
 authors = ["SUPERVAIZE Team"]
@@ -57,5 +57,5 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [[bin]]
-name = "skills-cookbook-relay"
+name = "skill-cookbook-relay"
 path = "src/main.rs"

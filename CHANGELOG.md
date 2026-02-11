@@ -1,4 +1,4 @@
-# Skills Cookbook ChangeLog
+# Skill Cookbook ChangeLog
 
 All notable changes to this project will be documented in this file.
 
@@ -18,12 +18,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- 🦀 **Skills Cookbook Relay**: Initial Tauri + Rust desktop application for secure skill delivery via MCP.
-- 🔐 **OAuth device flow**: Authentication with Runwaize Skills Cookbook via device code flow; tokens stored in OS keychain (macOS Keychain).
+- 🦀 **Skill Cookbook Relay**: Initial Tauri + Rust desktop application for secure skill delivery via MCP.
+- 🔐 **OAuth device flow**: Authentication with Runwaize Skill Cookbook via device code flow; tokens stored in OS keychain (macOS Keychain).
 - 🔌 **MCP server**: HTTP server on localhost:9876 exposing `skills.list`, `skills.get`, `libraries.list`, `libraries.get`, `skills.status`, `skills.refresh`.
 - 🔒 **Cryptographic verification**: Ed25519/RSA signature verification, SHA-256 hash checking, revocation handling for skill artifacts.
 - 💾 **Local artifact cache**: Sled-based cache with integrity verification, configurable TTL and max size.
 - 🔑 **Variable resolver**: Secret resolution from OS keychain, environment variables, 1Password CLI.
 - 🧑‍🎨 **Native UI**: System tray app with dashboard for monitoring connection status, cache, and sync.
-- 🛣️ **Configuration**: TOML config at `~/Library/Application Support/skills-cookbook-relay/config.toml` (macOS).
+- 🛣️ **Configuration**: TOML config at `~/Library/Application Support/skill-cookbook-relay/config.toml` (macOS).
 - 📖 **Documentation**: README with architecture, quick start, MCP methods, security model, troubleshooting.

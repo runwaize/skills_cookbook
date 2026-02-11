@@ -40,7 +40,7 @@ impl Default for Config {
     fn default() -> Self {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("skills-cookbook-relay");
+            .join("skill-cookbook-relay");
 
         Self {
             rss_api_url: "https://api.skills.cookbook/v1".to_string(),
@@ -112,7 +112,7 @@ impl Config {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| RelayError::Config("Cannot determine config directory".to_string()))?;
 
-        Ok(config_dir.join("skills-cookbook-relay").join("config.toml"))
+        Ok(config_dir.join("skill-cookbook-relay").join("config.toml"))
     }
 
     /// Get the device ID for this relay instance
@@ -144,6 +144,6 @@ impl Config {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| RelayError::Config("Cannot determine config directory".to_string()))?;
 
-        Ok(config_dir.join("skills-cookbook-relay").join("device_id"))
+        Ok(config_dir.join("skill-cookbook-relay").join("device_id"))
     }
 }

@@ -1,15 +1,15 @@
 use crate::config::Config;
 use crate::error::{RelayError, Result};
 use crate::types::TokenPair;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use oauth2::{
     basic::BasicClient, AuthUrl, ClientId, DeviceAuthorizationUrl, RefreshToken,
-    Scope, StandardDeviceAuthorizationResponse, TokenResponse, TokenUrl,
+    Scope, TokenResponse, TokenUrl,
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-const KEYCHAIN_SERVICE: &str = "com.supervaize.skills-cookbook-relay";
+const KEYCHAIN_SERVICE: &str = "com.supervaize.skill-cookbook-relay";
 const KEYCHAIN_REFRESH_TOKEN_KEY: &str = "refresh_token";
 const KEYCHAIN_ACCESS_TOKEN_KEY: &str = "access_token";
 
@@ -17,7 +17,7 @@ pub struct AuthManager {
     config: Config,
     oauth_client: BasicClient,
     current_token: Arc<RwLock<Option<TokenPair>>>,
-    device_id: String,
+    _device_id: String,
 }
 
 impl AuthManager {
@@ -43,7 +43,7 @@ impl AuthManager {
             config,
             oauth_client,
             current_token: Arc::new(RwLock::new(None)),
-            device_id,
+            _device_id: device_id,
         })
     }
 
@@ -315,6 +315,7 @@ impl AuthManager {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DeviceAuthorizationResponse {
     pub device_code: String,
     pub user_code: String,

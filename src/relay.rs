@@ -1,4 +1,4 @@
-use crate::auth::{AuthManager, DeviceAuthorizationResponse};
+use crate::auth::AuthManager;
 use crate::cache::ArtifactCache;
 use crate::config::Config;
 use crate::crypto;

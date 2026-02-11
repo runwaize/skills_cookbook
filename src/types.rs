@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ===== Core Types =====
 
@@ -189,6 +188,7 @@ pub struct McpError {
 // ===== Variable Resolution Types =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ResolvedVariable {
     pub name: String,
     pub value: serde_json::Value,
@@ -198,6 +198,7 @@ pub struct ResolvedVariable {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 pub enum VariableSource {
     Environment,
     Keychain,

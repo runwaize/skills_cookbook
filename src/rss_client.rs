@@ -37,6 +37,7 @@ impl RssClient {
     }
 
     /// Get latest approved release for a library
+    #[allow(dead_code)]
     pub async fn get_latest_approved_library_release(&self, library_id: &str) -> Result<LatestApprovedResponse> {
         let url = format!("{}/libraries/{}/releases/latest-approved", self.base_url, library_id);
         self.get(&url).await
@@ -71,7 +72,7 @@ impl RssClient {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| RelayError::Network(e))?;
+            .map_err(RelayError::Network)?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -85,7 +86,7 @@ impl RssClient {
         let bytes = response
             .bytes()
             .await
-            .map_err(|e| RelayError::Network(e))?
+            .map_err(RelayError::Network)?
             .to_vec();
 
         Ok(bytes)
@@ -163,7 +164,7 @@ impl RssClient {
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| RelayError::Network(e))?;
+            .map_err(RelayError::Network)?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -182,6 +183,6 @@ impl RssClient {
         response
             .json()
             .await
-            .map_err(|e| RelayError::Network(e))
+            .map_err(RelayError::Network)
     }
 }

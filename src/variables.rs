@@ -1,13 +1,14 @@
 use crate::error::{RelayError, Result};
 use crate::types::{ResolvedVariable, VariableSchema, VariableScope, VariableSource};
-use std::collections::HashMap;
 use std::env;
 
+#[allow(dead_code)]
 pub struct VariableResolver {
     workspace_id: Option<String>,
     project_id: Option<String>,
 }
 
+#[allow(dead_code)]
 impl VariableResolver {
     pub fn new(workspace_id: Option<String>, project_id: Option<String>) -> Self {
         Self {
@@ -135,7 +136,7 @@ impl VariableResolver {
 
     /// Get value from OS keychain
     async fn get_from_keychain(&self, key: &str) -> Result<String> {
-        let entry = keyring::Entry::new("skills-cookbook-relay-vars", key)
+        let entry = keyring::Entry::new("skill-cookbook-relay-vars", key)
             .map_err(|e| RelayError::Keychain(format!("Keychain access error: {}", e)))?;
 
         entry
@@ -206,7 +207,7 @@ impl VariableResolver {
             }
         };
 
-        let entry = keyring::Entry::new("skills-cookbook-relay-vars", &key)
+        let entry = keyring::Entry::new("skill-cookbook-relay-vars", &key)
             .map_err(|e| RelayError::Keychain(format!("Keychain access error: {}", e)))?;
 
         entry
@@ -230,7 +231,7 @@ impl VariableResolver {
             }
         };
 
-        let entry = keyring::Entry::new("skills-cookbook-relay-vars", &key)
+        let entry = keyring::Entry::new("skill-cookbook-relay-vars", &key)
             .map_err(|e| RelayError::Keychain(format!("Keychain access error: {}", e)))?;
 
         entry

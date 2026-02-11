@@ -1,4 +1,4 @@
-// Skills Cookbook Relay - Library exports for testing
+// Skill Cookbook Relay - Library exports for testing
 pub mod auth;
 pub mod cache;
 pub mod config;

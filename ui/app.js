@@ -6,7 +6,7 @@ let isAuthenticated = false;
 
 // Initialize app
 async function init() {
-    console.log('Initializing Skills Cookbook Relay UI...');
+    console.log('Initializing Skill Cookbook Relay UI...');
 
     // Set up event listeners
     document.getElementById('loginBtn').addEventListener('click', handleLogin);

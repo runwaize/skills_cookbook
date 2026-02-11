@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "Skills Cookbook Relay",
+  "productName": "Skill Cookbook Relay",
   "version": "0.1.0",
-  "identifier": "com.supervaize.skills-cookbook-relay",
+  "identifier": "com.supervaize.skill-cookbook-relay",
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://localhost:1420",
@@ -38,7 +38,7 @@
     },
     "windows": [
       {
-        "title": "Skills Cookbook Relay",
+        "title": "Skill Cookbook Relay",
         "width": 800,
         "height": 600,
         "resizable": true,
@@ -52,7 +52,7 @@
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true,
       "menuOnLeftClick": true,
-      "tooltip": "Skills Cookbook Relay"
+      "tooltip": "Skill Cookbook Relay"
     }
   },
   "plugins": {

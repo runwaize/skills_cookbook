@@ -1,4 +1,4 @@
-// Skills Cookbook Relay - Local MCP server for secure skill delivery
+// Skill Cookbook Relay - Local MCP server for secure skill delivery
 // Prevents instantiation of Windows on macOS.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "skills_cookbook_relay=info,tower_http=debug".into()),
+                .unwrap_or_else(|_| "skill_cookbook_relay=info,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer().with_target(false))
         .init();
@@ -114,8 +114,8 @@ async fn main() -> Result<()> {
             {
                 use tauri::tray::{TrayIconBuilder, MouseButton};
 
-                let tray = TrayIconBuilder::new()
-                    .tooltip("Skills Cookbook Relay")
+                let _tray = TrayIconBuilder::new()
+                    .tooltip("Skill Cookbook Relay")
                     .on_tray_icon_event(|tray, event| {
                         if let tauri::tray::TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
                             if let Some(window) = tray.app_handle().get_webview_window("main") {

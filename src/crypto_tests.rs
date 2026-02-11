@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use crate::crypto::*;
-    use crate::types::*;
 
     #[test]
     fn test_content_hash_computation() {

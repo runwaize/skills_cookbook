@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use crate::config::*;
-    use std::env;
 
     #[test]
     fn test_config_default() {

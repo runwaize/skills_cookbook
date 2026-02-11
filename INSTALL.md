@@ -1,4 +1,4 @@
-# Installation Guide - Skills Cookbook Relay
+# Installation Guide - Skill Cookbook Relay
 
 Complete installation instructions for all supported platforms.
 
@@ -24,17 +24,17 @@ Complete installation instructions for all supported platforms.
 ### Method 1: DMG Installer (Recommended)
 
 1. **Download the installer**
-   - Visit [Releases](https://github.com/SUPERVAIZE/skillsstudiorelay/releases)
-   - Download `Skills-Cookbook-Relay-{version}.dmg`
+   - Visit [Releases](https://github.com/SUPERVAIZE/skill_cookbook/releases)
+   - Download `Skill-Cookbook-Relay-{version}.dmg`
 
 2. **Install the application**
    ```bash
    # Open the DMG
-   open Skills-Cookbook-Relay-*.dmg
+   open Skill-Cookbook-Relay-*.dmg
 
    # Drag to Applications folder
    # Or use command line:
-   cp -r "/Volumes/Skills Cookbook Relay/Skills Cookbook Relay.app" /Applications/
+   cp -r "/Volumes/Skill Cookbook Relay/Skill Cookbook Relay.app" /Applications/
    ```
 
 3. **First launch**
@@ -45,19 +45,19 @@ Complete installation instructions for all supported platforms.
 
 4. **Set auto-start (optional)**
    - Open **System Preferences → Users & Groups → Login Items**
-   - Click **+** and add Skills Cookbook Relay
+   - Click **+** and add Skill Cookbook Relay
 
 ### Method 2: Homebrew
 
 ```bash
 # Add the tap
-brew tap supervaize/skills-cookbook
+brew tap supervaize/skill-cookbook
 
 # Install
-brew install skills-cookbook-relay
+brew install skill-cookbook-relay
 
 # Run
-skills-cookbook-relay
+skill-cookbook-relay
 ```
 
 ---
@@ -81,16 +81,16 @@ sudo apt install libwebkit2gtk-4.0-dev \
                  librsvg2-dev
 
 # Download .deb package
-wget https://github.com/SUPERVAIZE/skillsstudiorelay/releases/download/v0.1.0/skills-cookbook-relay_0.1.0_amd64.deb
+wget https://github.com/SUPERVAIZE/skill_cookbook/releases/download/v0.1.0/skill-cookbook-relay_0.1.0_amd64.deb
 
 # Install
-sudo dpkg -i skills-cookbook-relay_0.1.0_amd64.deb
+sudo dpkg -i skill-cookbook-relay_0.1.0_amd64.deb
 
 # Fix dependencies if needed
 sudo apt-get install -f
 
 # Run
-skills-cookbook-relay
+skill-cookbook-relay
 ```
 
 ### Fedora/RHEL
@@ -102,13 +102,13 @@ sudo dnf install webkit2gtk3-devel \
                  librsvg2-devel
 
 # Download .rpm package
-wget https://github.com/SUPERVAIZE/skillsstudiorelay/releases/download/v0.1.0/skills-cookbook-relay-0.1.0.x86_64.rpm
+wget https://github.com/SUPERVAIZE/skill_cookbook/releases/download/v0.1.0/skill-cookbook-relay-0.1.0.x86_64.rpm
 
 # Install
-sudo rpm -i skills-cookbook-relay-0.1.0.x86_64.rpm
+sudo rpm -i skill-cookbook-relay-0.1.0.x86_64.rpm
 
 # Run
-skills-cookbook-relay
+skill-cookbook-relay
 ```
 
 ### Auto-start on Linux
@@ -118,14 +118,14 @@ Create a systemd user service:
 ```bash
 # Create service file
 mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/skills-cookbook-relay.service <<EOF
+cat > ~/.config/systemd/user/skill-cookbook-relay.service <<EOF
 [Unit]
-Description=Skills Cookbook Relay
+Description=Skill Cookbook Relay
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/skills-cookbook-relay
+ExecStart=/usr/bin/skill-cookbook-relay
 Restart=on-failure
 
 [Install]
@@ -133,11 +133,11 @@ WantedBy=default.target
 EOF
 
 # Enable and start
-systemctl --user enable skills-cookbook-relay
-systemctl --user start skills-cookbook-relay
+systemctl --user enable skill-cookbook-relay
+systemctl --user start skill-cookbook-relay
 
 # Check status
-systemctl --user status skills-cookbook-relay
+systemctl --user status skill-cookbook-relay
 ```
 
 ---
@@ -153,33 +153,33 @@ systemctl --user status skills-cookbook-relay
 ### Method 1: MSI Installer (Recommended)
 
 1. **Download the installer**
-   - Visit [Releases](https://github.com/SUPERVAIZE/skillsstudiorelay/releases)
-   - Download `Skills-Cookbook-Relay-{version}.msi`
+   - Visit [Releases](https://github.com/SUPERVAIZE/skill_cookbook/releases)
+   - Download `Skill-Cookbook-Relay-{version}.msi`
 
 2. **Run the installer**
    - Double-click the MSI file
    - Follow the installation wizard
-   - Choose installation directory (default: `C:\Program Files\Skills Cookbook Relay`)
+   - Choose installation directory (default: `C:\Program Files\Skill Cookbook Relay`)
 
 3. **First launch**
-   - Find in Start Menu: "Skills Cookbook Relay"
-   - Or run from command line: `skills-cookbook-relay.exe`
+   - Find in Start Menu: "Skill Cookbook Relay"
+   - Or run from command line: `skill-cookbook-relay.exe`
 
 4. **Set auto-start (optional)**
    - Press `Win+R` and type `shell:startup`
-   - Create shortcut to Skills Cookbook Relay in this folder
+   - Create shortcut to Skill Cookbook Relay in this folder
 
 ### Method 2: Portable ZIP
 
 ```powershell
 # Download portable version
-Invoke-WebRequest -Uri "https://github.com/SUPERVAIZE/skillsstudiorelay/releases/download/v0.1.0/skills-cookbook-relay-portable.zip" -OutFile "skills-cookbook-relay.zip"
+Invoke-WebRequest -Uri "https://github.com/SUPERVAIZE/skill_cookbook/releases/download/v0.1.0/skill-cookbook-relay-portable.zip" -OutFile "skill-cookbook-relay.zip"
 
 # Extract
-Expand-Archive -Path "skills-cookbook-relay.zip" -DestinationPath "C:\Skills-Cookbook-Relay"
+Expand-Archive -Path "skill-cookbook-relay.zip" -DestinationPath "C:\Skill-Cookbook-Relay"
 
 # Run
-C:\Skills-Cookbook-Relay\skills-cookbook-relay.exe
+C:\Skill-Cookbook-Relay\skill-cookbook-relay.exe
 ```
 
 ---
@@ -197,14 +197,14 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ```bash
 # Clone repository
-git clone https://github.com/SUPERVAIZE/skillsstudiorelay.git
-cd skillsstudiorelay
+git clone https://github.com/SUPERVAIZE/skill_cookbook.git
+cd skill_cookbook
 
 # Build release version
 cargo build --release
 
 # The binary will be in target/release/
-./target/release/skills-cookbook-relay
+./target/release/skill-cookbook-relay
 ```
 
 ### Platform-Specific Build Steps
@@ -273,7 +273,7 @@ Or: `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
 ```json
 {
   "mcpServers": {
-    "skills-cookbook": {
+    "skill-cookbook": {
       "url": "http://localhost:9876"
     }
   }
@@ -286,14 +286,14 @@ Edit your OpenClaw config:
 
 ```yaml
 mcp_servers:
-  skills-cookbook:
+  skill-cookbook:
     url: http://localhost:9876
     enabled: true
 ```
 
 ### 3. Authenticate
 
-1. Open Skills Cookbook Relay dashboard
+1. Open Skill Cookbook Relay dashboard
 2. Click "Connect Account"
 3. Follow the OAuth flow in your browser
 
@@ -319,29 +319,29 @@ curl -X POST http://localhost:9876 \
 
 ```bash
 # Remove application
-rm -rf /Applications/Skills\ Cookbook\ Relay.app
+rm -rf /Applications/Skill\ Cookbook\ Relay.app
 
 # Remove configuration and cache
-rm -rf ~/Library/Application\ Support/skills-cookbook-relay
-rm -rf ~/Library/Caches/skills-cookbook-relay
-rm -rf ~/Library/Logs/skills-cookbook-relay
+rm -rf ~/Library/Application\ Support/skill-cookbook-relay
+rm -rf ~/Library/Caches/skill-cookbook-relay
+rm -rf ~/Library/Logs/skill-cookbook-relay
 
 # Remove keychain entries (optional)
-security delete-generic-password -s "com.supervaize.skills-cookbook-relay"
+security delete-generic-password -s "com.supervaize.skill-cookbook-relay"
 ```
 
 ### Linux
 
 ```bash
 # Ubuntu/Debian
-sudo apt remove skills-cookbook-relay
+sudo apt remove skill-cookbook-relay
 
 # Fedora
-sudo dnf remove skills-cookbook-relay
+sudo dnf remove skill-cookbook-relay
 
 # Remove user data
-rm -rf ~/.config/skills-cookbook-relay
-rm -rf ~/.cache/skills-cookbook-relay
+rm -rf ~/.config/skill-cookbook-relay
+rm -rf ~/.cache/skill-cookbook-relay
 ```
 
 ### Windows
@@ -349,11 +349,11 @@ rm -rf ~/.cache/skills-cookbook-relay
 ```powershell
 # Use Windows Settings → Apps → Uninstall
 # Or use command line:
-msiexec /x "Skills-Cookbook-Relay-0.1.0.msi"
+msiexec /x "Skill-Cookbook-Relay-0.1.0.msi"
 
 # Remove user data
-Remove-Item -Recurse "$env:APPDATA\skills-cookbook-relay"
-Remove-Item -Recurse "$env:LOCALAPPDATA\skills-cookbook-relay"
+Remove-Item -Recurse "$env:APPDATA\skill-cookbook-relay"
+Remove-Item -Recurse "$env:LOCALAPPDATA\skill-cookbook-relay"
 ```
 
 ---
@@ -373,14 +373,14 @@ mcp_server_port = 9877  # Use different port
 
 ```bash
 # Reset app quarantine
-xattr -cr /Applications/Skills\ Cookbook\ Relay.app
+xattr -cr /Applications/Skill\ Cookbook\ Relay.app
 ```
 
 ### Missing Dependencies (Linux)
 
 ```bash
 # Check what's missing
-ldd $(which skills-cookbook-relay)
+ldd $(which skill-cookbook-relay)
 
 # Install common missing libs
 sudo apt install libssl1.1 libwebkit2gtk-4.0-37
@@ -392,7 +392,7 @@ Make sure localhost connections are allowed:
 
 ```bash
 # macOS
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /Applications/Skills\ Cookbook\ Relay.app
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /Applications/Skill\ Cookbook\ Relay.app
 
 # Linux (UFW)
 sudo ufw allow 9876/tcp
@@ -413,5 +413,5 @@ After installation:
 Having installation issues?
 
 - 📧 Email: support@supervaize.com
-- 🐛 Report: [GitHub Issues](https://github.com/SUPERVAIZE/skillsstudiorelay/issues)
+- 🐛 Report: [GitHub Issues](https://github.com/SUPERVAIZE/skill_cookbook/issues)
 - 💬 Chat: [Discord Community](https://discord.gg/supervaize)

@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'rc') }}
+
+  build-tauri:
+    name: Build Tauri App
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: ubuntu-22.04
+            rust_target: x86_64-unknown-linux-gnu
+            artifact_name: linux-x86_64
+          - os: macos-latest
+            rust_target: x86_64-apple-darwin
+            artifact_name: macos-x86_64
+          - os: macos-latest
+            rust_target: aarch64-apple-darwin
+            artifact_name: macos-aarch64
+          - os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            artifact_name: windows-x86_64
+
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.rust_target }}
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform.rust_target }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version '^2.0.0' --locked
+
+      - name: Build Tauri app
+        run: cargo tauri build --target ${{ matrix.platform.rust_target }} --verbose
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Package artifacts (macOS)
+        if: matrix.platform.os == 'macos-latest'
+        run: |
+          cd target/${{ matrix.platform.rust_target }}/release/bundle
+          if [ -d "dmg" ]; then
+            for dmg in dmg/*.dmg; do
+              [ -f "$dmg" ] && echo "DMG_PATH=$dmg" >> $GITHUB_ENV
+            done
+          fi
+          if [ -d "macos" ]; then
+            cd macos
+            tar -czf ../Skill-Cookbook-Relay-${{ matrix.platform.artifact_name }}.app.tar.gz *.app
+            echo "APP_TAR_PATH=target/${{ matrix.platform.rust_target }}/release/bundle/Skill-Cookbook-Relay-${{ matrix.platform.artifact_name }}.app.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Package artifacts (Ubuntu)
+        if: matrix.platform.os == 'ubuntu-22.04'
+        run: |
+          cd target/${{ matrix.platform.rust_target }}/release/bundle
+          if [ -d "appimage" ]; then
+            for appimage in appimage/*.AppImage; do
+              [ -f "$appimage" ] && echo "APPIMAGE_PATH=$appimage" >> $GITHUB_ENV
+            done
+          fi
+          if [ -d "deb" ]; then
+            for deb in deb/*.deb; do
+              [ -f "$deb" ] && echo "DEB_PATH=$deb" >> $GITHUB_ENV
+            done
+          fi
+
+      - name: Package artifacts (Windows)
+        if: matrix.platform.os == 'windows-latest'
+        shell: bash
+        run: |
+          cd target/${{ matrix.platform.rust_target }}/release/bundle
+          if [ -d "msi" ]; then
+            for msi in msi/*.msi; do
+              [ -f "$msi" ] && echo "MSI_PATH=$msi" >> $GITHUB_ENV
+            done
+          fi
+          if [ -d "nsis" ]; then
+            for exe in nsis/*.exe; do
+              [ -f "$exe" ] && echo "NSIS_PATH=$exe" >> $GITHUB_ENV
+            done
+          fi
+
+      - name: Upload DMG (macOS)
+        if: matrix.platform.os == 'macos-latest' && env.DMG_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.DMG_PATH }}
+          asset_name: Skill-Cookbook-Relay-${{ needs.create-release.outputs.version }}-${{ matrix.platform.artifact_name }}.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload App Bundle (macOS)
+        if: matrix.platform.os == 'macos-latest' && env.APP_TAR_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.APP_TAR_PATH }}
+          asset_name: Skill-Cookbook-Relay-${{ needs.create-release.outputs.version }}-${{ matrix.platform.artifact_name }}.app.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload AppImage (Linux)
+        if: matrix.platform.os == 'ubuntu-22.04' && env.APPIMAGE_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.APPIMAGE_PATH }}
+          asset_name: Skill-Cookbook-Relay-${{ needs.create-release.outputs.version }}-${{ matrix.platform.artifact_name }}.AppImage
+          asset_content_type: application/x-executable
+
+      - name: Upload DEB (Linux)
+        if: matrix.platform.os == 'ubuntu-22.04' && env.DEB_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.DEB_PATH }}
+          asset_name: Skill-Cookbook-Relay-${{ needs.create-release.outputs.version }}-${{ matrix.platform.artifact_name }}.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload MSI (Windows)
+        if: matrix.platform.os == 'windows-latest' && env.MSI_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.MSI_PATH }}
+          asset_name: Skill-Cookbook-Relay-${{ needs.create-release.outputs.version }}-${{ matrix.platform.artifact_name }}.msi
+          asset_content_type: application/x-msi
+
+      - name: Upload NSIS Installer (Windows)
+        if: matrix.platform.os == 'windows-latest' && env.NSIS_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.NSIS_PATH }}
+          asset_name: Skill-Cookbook-Relay-${{ needs.create-release.outputs.version }}-${{ matrix.platform.artifact_name }}-setup.exe
+          asset_content_type: application/x-msdownload
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform.artifact_name }}
+          path: target/${{ matrix.platform.rust_target }}/release/bundle/
+          retention-days: 30
