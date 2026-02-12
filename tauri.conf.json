@@ -30,7 +30,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self' https://skills.runwaize.com http://127.0.0.1:9123; script-src 'self' 'unsafe-inline' https://skills.runwaize.com; style-src 'self' 'unsafe-inline' https://skills.runwaize.com; connect-src 'self' https://skills.runwaize.com http://127.0.0.1:9123",
       "assetProtocol": {
         "enable": true,
         "scope": ["$RESOURCE/**"]
@@ -39,13 +39,14 @@
     "windows": [
       {
         "title": "Skill Cookbook Relay",
-        "width": 800,
-        "height": 600,
+        "width": 1200,
+        "height": 800,
         "resizable": true,
         "fullscreen": false,
         "visible": false,
         "hiddenTitle": false,
-        "decorations": true
+        "decorations": true,
+        "url": "https://skills.runwaize.com"
       }
     ],
     "trayIcon": {
@@ -58,6 +59,11 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "active": false,
+      "endpoints": [],
+      "pubkey": ""
     }
   }
 }

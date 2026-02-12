@@ -47,6 +47,23 @@ impl VariableResolver {
         Ok(resolved)
     }
 
+    /// Returns names of required variables that cannot be resolved (no secret values).
+    pub async fn missing_required_variables(
+        &self,
+        schemas: &[VariableSchema],
+    ) -> Vec<String> {
+        let mut missing = Vec::new();
+        for schema in schemas {
+            if !schema.required {
+                continue;
+            }
+            if self.resolve_variable(schema).await.is_err() {
+                missing.push(schema.name.clone());
+            }
+        }
+        missing
+    }
+
     /// Resolve a single variable
     async fn resolve_variable(&self, schema: &VariableSchema) -> Result<ResolvedVariable> {
         // Try resolution chain based on scope
@@ -316,5 +333,100 @@ mod tests {
         assert_eq!(resolved.source, VariableSource::Environment);
 
         env::remove_var("TEST_VAR");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_required_var_missing() {
+        let resolver = VariableResolver::new(None, None);
+        let schema = VariableSchema {
+            name: "MISSING_VAR".to_string(),
+            var_type: "string".to_string(),
+            scope: VariableScope::Personal,
+            is_secret: false,
+            required: true,
+            default: None,
+            description: None,
+        };
+        let result = resolver.resolve_variable(&schema).await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("MISSING_VAR"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resolve_optional_var_missing() {
+        let resolver = VariableResolver::new(None, None);
+        let schema = VariableSchema {
+            name: "OPTIONAL_VAR".to_string(),
+            var_type: "string".to_string(),
+            scope: VariableScope::Personal,
+            is_secret: false,
+            required: false,
+            default: None,
+            description: None,
+        };
+        let result = resolver.resolve_variable(&schema).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_with_default() {
+        let resolver = VariableResolver::new(None, None);
+        let schema = VariableSchema {
+            name: "VAR_WITH_DEFAULT".to_string(),
+            var_type: "string".to_string(),
+            scope: VariableScope::Personal,
+            is_secret: false,
+            required: false,
+            default: Some(serde_json::Value::String("default_value".to_string())),
+            description: None,
+        };
+        let result = resolver.resolve_variable(&schema).await;
+        assert!(result.is_ok());
+        let resolved = result.unwrap();
+        assert_eq!(
+            resolved.value,
+            serde_json::Value::String("default_value".to_string())
+        );
+        assert_eq!(resolved.source, VariableSource::RssDefault);
+    }
+
+    #[tokio::test]
+    async fn test_missing_required_variables() {
+        let resolver = VariableResolver::new(None, None);
+        let schemas = vec![
+            VariableSchema {
+                name: "VAR1".to_string(),
+                var_type: "string".to_string(),
+                scope: VariableScope::Personal,
+                is_secret: false,
+                required: true,
+                default: None,
+                description: None,
+            },
+            VariableSchema {
+                name: "VAR2".to_string(),
+                var_type: "string".to_string(),
+                scope: VariableScope::Personal,
+                is_secret: false,
+                required: true,
+                default: Some(serde_json::Value::String("default".to_string())),
+                description: None,
+            },
+            VariableSchema {
+                name: "VAR3".to_string(),
+                var_type: "string".to_string(),
+                scope: VariableScope::Personal,
+                is_secret: false,
+                required: false,
+                default: None,
+                description: None,
+            },
+        ];
+        env::set_var("VAR1", "value1");
+        let missing = resolver.missing_required_variables(&schemas).await;
+        env::remove_var("VAR1");
+        assert_eq!(missing.len(), 0);
     }
 }

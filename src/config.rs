@@ -26,6 +26,21 @@ pub struct Config {
 
     pub default_libraries: Vec<String>,
     pub update_mode: UpdateMode,
+
+    #[serde(default = "default_bridge_port")]
+    pub bridge_port: u16,
+    #[serde(default)]
+    pub exposed_libraries: Vec<String>,
+    #[serde(default = "default_skills_web_url")]
+    pub skills_web_url: String,
+}
+
+fn default_bridge_port() -> u16 {
+    9123
+}
+
+fn default_skills_web_url() -> String {
+    "https://skills.runwaize.com".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +80,10 @@ impl Default for Config {
 
             default_libraries: vec![],
             update_mode: UpdateMode::LatestApproved,
+
+            bridge_port: 9123,
+            exposed_libraries: vec![],
+            skills_web_url: "https://skills.runwaize.com".to_string(),
         }
     }
 }

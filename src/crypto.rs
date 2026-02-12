@@ -147,28 +147,3 @@ fn parse_pem_public_key(pem: &str) -> Result<Vec<u8>> {
         .map_err(|e| RelayError::InvalidSignature(format!("Invalid PEM encoding: {}", e)))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_content_hash() {
-        let payload = b"test payload";
-        let hash = compute_content_hash(payload);
-        assert_eq!(hash.len(), 64); // SHA-256 produces 64 hex characters
-    }
-
-    #[test]
-    fn test_verify_content_hash_success() {
-        let payload = b"test payload";
-        let hash = compute_content_hash(payload);
-        assert!(verify_content_hash(payload, &hash).is_ok());
-    }
-
-    #[test]
-    fn test_verify_content_hash_failure() {
-        let payload = b"test payload";
-        let wrong_hash = "0000000000000000000000000000000000000000000000000000000000000000";
-        assert!(verify_content_hash(payload, wrong_hash).is_err());
-    }
-}

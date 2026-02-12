@@ -5,24 +5,33 @@ mod tests {
 
     #[test]
     fn test_artifact_type_serialization() {
-        let artifact_type = ArtifactType::Prompt;
-        let json = serde_json::to_string(&artifact_type).unwrap();
-        assert_eq!(json, "\"prompt\"");
-
-        let artifact_type = ArtifactType::McpTool;
-        let json = serde_json::to_string(&artifact_type).unwrap();
-        assert_eq!(json, "\"mcp_tool\"");
+        let types = vec![
+            ArtifactType::Prompt,
+            ArtifactType::McpTool,
+            ArtifactType::OpenclawSkill,
+            ArtifactType::Generic,
+        ];
+        for artifact_type in types {
+            let json = serde_json::to_string(&artifact_type).unwrap();
+            let deserialized: ArtifactType = serde_json::from_str(&json).unwrap();
+            assert_eq!(format!("{:?}", artifact_type), format!("{:?}", deserialized));
+        }
     }
 
     #[test]
     fn test_approval_state_serialization() {
-        let state = ApprovalState::Approved;
-        let json = serde_json::to_string(&state).unwrap();
-        assert_eq!(json, "\"approved\"");
-
-        let state = ApprovalState::Draft;
-        let json = serde_json::to_string(&state).unwrap();
-        assert_eq!(json, "\"draft\"");
+        let states = vec![
+            ApprovalState::Draft,
+            ApprovalState::Pending,
+            ApprovalState::Approved,
+            ApprovalState::Published,
+            ApprovalState::Rejected,
+        ];
+        for state in states {
+            let json = serde_json::to_string(&state).unwrap();
+            let deserialized: ApprovalState = serde_json::from_str(&json).unwrap();
+            assert_eq!(format!("{:?}", state), format!("{:?}", deserialized));
+        }
     }
 
     #[test]
@@ -42,13 +51,19 @@ mod tests {
 
     #[test]
     fn test_variable_source_serialization() {
-        let source = VariableSource::Environment;
-        let json = serde_json::to_string(&source).unwrap();
-        assert_eq!(json, "\"environment\"");
-
-        let source = VariableSource::Keychain;
-        let json = serde_json::to_string(&source).unwrap();
-        assert_eq!(json, "\"keychain\"");
+        let sources = vec![
+            VariableSource::Environment,
+            VariableSource::Keychain,
+            VariableSource::Config,
+            VariableSource::OnePassword,
+            VariableSource::Vault,
+            VariableSource::RssDefault,
+        ];
+        for source in sources {
+            let json = serde_json::to_string(&source).unwrap();
+            let deserialized: VariableSource = serde_json::from_str(&json).unwrap();
+            assert_eq!(source, deserialized);
+        }
     }
 
     #[test]
@@ -115,23 +130,30 @@ mod tests {
 
     #[test]
     fn test_update_type_serialization() {
-        let update = UpdateType::NewVersion;
-        let json = serde_json::to_string(&update).unwrap();
-        assert_eq!(json, "\"new_version\"");
-
-        let update = UpdateType::Revoked;
-        let json = serde_json::to_string(&update).unwrap();
-        assert_eq!(json, "\"revoked\"");
+        let updates = vec![
+            UpdateType::NewVersion,
+            UpdateType::Revoked,
+            UpdateType::MetadataChanged,
+        ];
+        for update in updates {
+            let json = serde_json::to_string(&update).unwrap();
+            let deserialized: UpdateType = serde_json::from_str(&json).unwrap();
+            assert_eq!(format!("{:?}", update), format!("{:?}", deserialized));
+        }
     }
 
     #[test]
     fn test_visibility_serialization() {
-        let vis = Visibility::Public;
-        let json = serde_json::to_string(&vis).unwrap();
-        assert_eq!(json, "\"public\"");
-
-        let vis = Visibility::Personal;
-        let json = serde_json::to_string(&vis).unwrap();
-        assert_eq!(json, "\"personal\"");
+        let visibilities = vec![
+            Visibility::Personal,
+            Visibility::Workspace,
+            Visibility::Project,
+            Visibility::Public,
+        ];
+        for vis in visibilities {
+            let json = serde_json::to_string(&vis).unwrap();
+            let deserialized: Visibility = serde_json::from_str(&json).unwrap();
+            assert_eq!(format!("{:?}", vis), format!("{:?}", deserialized));
+        }
     }
 }

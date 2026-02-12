@@ -8,10 +8,11 @@ use crate::types::*;
 use crate::variables::VariableResolver;
 use chrono::Utc;
 use parking_lot::RwLock;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub struct RelayState {
-    pub config: Config,
+    pub config: Arc<RwLock<Config>>,
     auth_manager: Arc<AuthManager>,
     rss_client: Arc<RssClient>,
     cache: Arc<ArtifactCache>,
@@ -44,7 +45,7 @@ impl RelayState {
         let variable_resolver = Arc::new(RwLock::new(VariableResolver::new(None, None)));
 
         let state = Self {
-            config,
+            config: Arc::new(RwLock::new(config)),
             auth_manager,
             rss_client,
             cache,
@@ -86,7 +87,7 @@ impl RelayState {
             artifact_count: cache_stats.artifact_count,
             library_count,
             mcp_server_running: true, // Assuming it's running
-            mcp_server_port: Some(self.config.mcp_server_port),
+            mcp_server_port: Some(self.config.read().mcp_server_port),
         })
     }
 
@@ -125,9 +126,18 @@ impl RelayState {
         Ok(())
     }
 
-    /// List all accessible libraries
+    /// List all accessible libraries (filtered by exposed_libraries when set).
     pub async fn list_libraries(&self) -> Result<Vec<Library>> {
-        self.rss_client.list_libraries().await
+        let libraries = self.rss_client.list_libraries().await?;
+        let config_guard = self.config.read();
+        if config_guard.exposed_libraries.is_empty() {
+            return Ok(libraries);
+        }
+        let allowlist: std::collections::HashSet<_> = config_guard.exposed_libraries.iter().collect();
+        Ok(libraries
+            .into_iter()
+            .filter(|lib| allowlist.contains(&lib.library_id))
+            .collect())
     }
 
     /// Get a specific library
@@ -135,23 +145,27 @@ impl RelayState {
         self.rss_client.get_library(library_id).await
     }
 
-    /// List skills, optionally filtered by library
+    /// List skills, optionally filtered by library (and by exposed_libraries when set).
     pub async fn list_skills(&self, library_id: Option<&str>) -> Result<Vec<SkillSummary>> {
-        if let Some(lib_id) = library_id {
-            self.rss_client.list_skills(lib_id).await
-        } else {
-            // List all skills from all libraries
-            let libraries = self.rss_client.list_libraries().await?;
-            let mut all_skills = Vec::new();
-
-            for library in libraries {
-                if let Ok(skills) = self.rss_client.list_skills(&library.library_id).await {
-                    all_skills.extend(skills);
+        let libraries = self.list_libraries().await?;
+        let lib_ids: Vec<String> = match library_id {
+            Some(id) => {
+                if libraries.iter().any(|l| l.library_id == id) {
+                    vec![id.to_string()]
+                } else {
+                    vec![]
                 }
             }
+            None => libraries.iter().map(|l| l.library_id.clone()).collect(),
+        };
 
-            Ok(all_skills)
+        let mut all_skills = Vec::new();
+        for lib_id in lib_ids {
+            if let Ok(skills) = self.rss_client.list_skills(&lib_id).await {
+                all_skills.extend(skills);
+            }
         }
+        Ok(all_skills)
     }
 
     /// Get a specific skill with verification and variable resolution
@@ -169,7 +183,7 @@ impl RelayState {
         // Check cache first
         if let Some(cached_artifact) = self.cache.get(&latest.artifact_id)? {
             // Verify artifact
-            if self.config.verification_required {
+            if self.config.read().verification_required {
                 self.verify_artifact(&cached_artifact).await?;
             }
 
@@ -195,7 +209,7 @@ impl RelayState {
         let artifact = self.rss_client.get_artifact(&latest.artifact_id).await?;
 
         // Verify artifact
-        if self.config.verification_required {
+        if self.config.read().verification_required {
             self.verify_artifact(&artifact).await?;
         }
 
@@ -289,6 +303,24 @@ impl RelayState {
         Ok(())
     }
 
+    /// Returns names of required variables that are not resolved for a skill (no values).
+    pub async fn check_missing_variables(&self, skill_id: &str) -> Result<Vec<String>> {
+        let artifact = self.get_skill(skill_id, "latest_approved").await?;
+        let schemas = &artifact.metadata.variables;
+        let missing = self
+            .variable_resolver
+            .read()
+            .missing_required_variables(schemas)
+            .await;
+        Ok(missing)
+    }
+
+    /// Update exposed libraries allowlist and persist config.
+    pub fn set_exposed_libraries(&self, library_ids: Vec<String>) -> Result<()> {
+        self.config.write().exposed_libraries = library_ids;
+        self.config.read().save()
+    }
+
     /// Wipe all data (cache + tokens)
     pub async fn wipe_all_data(&self) -> Result<()> {
         self.cache.clear()?;
@@ -334,7 +366,7 @@ impl RelayState {
 
     /// Spawn background sync task
     fn spawn_sync_task(&self) {
-        let interval_minutes = self.config.sync_interval_minutes;
+        let interval_minutes = self.config.read().sync_interval_minutes;
         let state = Arc::new(self.clone_for_sync());
 
         tokio::spawn(async move {
@@ -357,7 +389,7 @@ impl RelayState {
     /// Create a lightweight clone for background tasks
     fn clone_for_sync(&self) -> Self {
         Self {
-            config: self.config.clone(),
+            config: Arc::clone(&self.config),
             auth_manager: self.auth_manager.clone(),
             rss_client: self.rss_client.clone(),
             cache: self.cache.clone(),

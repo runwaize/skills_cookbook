@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod auth;
+mod bridge;
 mod cache;
 mod config;
 mod crypto;
@@ -78,8 +79,11 @@ async fn main() -> Result<()> {
     tracing::info!("Configuration loaded");
 
     // Initialize relay state
-    let relay_state = Arc::new(RelayState::new(config).await?);
+    let relay_state = Arc::new(RelayState::new(config.clone()).await?);
     tracing::info!("Relay state initialized");
+
+    // Generate session token for bridge (will be used in setup)
+    let session_token = uuid::Uuid::new_v4().to_string();
 
     // Spawn MCP server task
     let mcp_relay_state = relay_state.clone();
@@ -92,6 +96,9 @@ async fn main() -> Result<()> {
     // Build Tauri application
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(relay_state)
         .invoke_handler(tauri::generate_handler![
             get_relay_status,
@@ -103,6 +110,68 @@ async fn main() -> Result<()> {
             wipe_all_data,
         ])
         .setup(|app| {
+            // Spawn bridge server task (with AppHandle for updater)
+            let bridge_relay_state = relay_state.clone();
+            let bridge_token = session_token.clone();
+            let bridge_port = config.bridge_port;
+            let bridge_origin = Some(config.skills_web_url.clone());
+            let app_handle = app.handle().clone();
+            #[cfg(feature = "custom-protocol")]
+            {
+                let bridge_relay_state = relay_state.clone();
+                let bridge_token = session_token.clone();
+                let bridge_port = config.bridge_port;
+                let bridge_origin = Some(config.skills_web_url.clone());
+                let app_handle = app.handle().clone();
+                tokio::spawn(async move {
+                    if let Err(e) = bridge::start_bridge_with_app(
+                        bridge_relay_state,
+                        bridge_token,
+                        bridge_port,
+                        bridge_origin,
+                        Some(app_handle),
+                    )
+                    .await
+                    {
+                        tracing::error!("Bridge server error: {}", e);
+                    }
+                });
+            }
+            #[cfg(not(feature = "custom-protocol"))]
+            {
+                let bridge_relay_state = relay_state.clone();
+                let bridge_token = session_token.clone();
+                let bridge_port = config.bridge_port;
+                let bridge_origin = Some(config.skills_web_url.clone());
+                tokio::spawn(async move {
+                    if let Err(e) = bridge::start_bridge(
+                        bridge_relay_state,
+                        bridge_token,
+                        bridge_port,
+                        bridge_origin,
+                    )
+                    .await
+                    {
+                        tracing::error!("Bridge server error: {}", e);
+                    }
+                });
+            }
+
+            // Set window URL from config (or env var for dev)
+            let web_url = std::env::var("TAURI_DEV_WEB")
+                .unwrap_or_else(|_| {
+                    config::Config::load()
+                        .map(|c| c.skills_web_url)
+                        .unwrap_or_else(|_| "https://skills.runwaize.com".to_string())
+                });
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(e) = window.navigate(tauri::Url::parse(&web_url).unwrap_or_else(|_| {
+                    tauri::Url::parse("https://skills.runwaize.com").unwrap()
+                })) {
+                    tracing::warn!("Failed to navigate window: {}", e);
+                }
+            }
+
             // Set up system tray
             #[cfg(desktop)]
             {

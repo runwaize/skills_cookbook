@@ -28,6 +28,7 @@ Complete installation instructions for all supported platforms.
    - Download `Skill-Cookbook-Relay-{version}.dmg`
 
 2. **Install the application**
+
    ```bash
    # Open the DMG
    open Skill-Cookbook-Relay-*.dmg
@@ -189,6 +190,7 @@ C:\Skill-Cookbook-Relay\skill-cookbook-relay.exe
 ### Prerequisites
 
 Install Rust toolchain:
+
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -286,14 +288,14 @@ Edit your OpenClaw config:
 
 ```yaml
 mcp_servers:
-  skill-cookbook:
+  skills-cookbook:
     url: http://localhost:9876
     enabled: true
 ```
 
 ### 3. Authenticate
 
-1. Open Skill Cookbook Relay dashboard
+1. Open Skills Cookbook Relay dashboard
 2. Click "Connect Account"
 3. Follow the OAuth flow in your browser
 

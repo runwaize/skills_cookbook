@@ -6,8 +6,8 @@ use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
 pub async fn start_mcp_server(relay_state: Arc<RelayState>) -> Result<()> {
-    let host = relay_state.config.mcp_server_host.clone();
-    let port = relay_state.config.mcp_server_port;
+    let host = relay_state.config.read().mcp_server_host.clone();
+    let port = relay_state.config.read().mcp_server_port;
 
     // Build router
     let app = Router::new()

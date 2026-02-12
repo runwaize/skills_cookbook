@@ -235,3 +235,112 @@ pub struct CacheStats {
 }
 
 // CachedArtifact already implements Serialize/Deserialize in types.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Artifact, ArtifactMetadata, ArtifactSignature, ArtifactType, ApprovalState};
+    use tempfile::TempDir;
+
+    fn create_test_artifact(id: &str) -> Artifact {
+        Artifact {
+            artifact_id: id.to_string(),
+            skill_id: format!("skill-{}", id),
+            skill_version_id: format!("version-{}", id),
+            semver: Some("1.0.0".to_string()),
+            content_hash: "test_hash".to_string(),
+            created_at: chrono::Utc::now(),
+            artifact_type: ArtifactType::Generic,
+            payload: b"test payload".to_vec(),
+            metadata: ArtifactMetadata {
+                name: format!("Test Artifact {}", id),
+                description: None,
+                inputs: vec![],
+                outputs: vec![],
+                compatibility: vec![],
+                risk_tags: vec![],
+                required_permissions: vec![],
+                variables: vec![],
+                approval_state: ApprovalState::Approved,
+                revoked: false,
+                revoked_reason: None,
+            },
+            signature: ArtifactSignature {
+                signature: "test_sig".to_string(),
+                algorithm: "ED25519".to_string(),
+                key_id: "test_key".to_string(),
+                issued_at: chrono::Utc::now(),
+                expires_at: None,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cache_new() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        let stats = cache.stats();
+        assert_eq!(stats.artifact_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cache_put_and_get() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        let artifact = create_test_artifact("test-1");
+        cache.put(artifact.clone()).unwrap();
+        let retrieved = cache.get("test-1").unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().artifact_id, "test-1");
+    }
+
+    #[tokio::test]
+    async fn test_cache_get_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        let result = cache.get("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_cache_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        let artifact = create_test_artifact("test-1");
+        cache.put(artifact).unwrap();
+        assert!(cache.get("test-1").unwrap().is_some());
+        cache.remove("test-1").unwrap();
+        assert!(cache.get("test-1").unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_cache_clear() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        cache.put(create_test_artifact("test-1")).unwrap();
+        cache.put(create_test_artifact("test-2")).unwrap();
+        assert_eq!(cache.stats().artifact_count, 2);
+        cache.clear().unwrap();
+        assert_eq!(cache.stats().artifact_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cache_stats() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        let stats = cache.stats();
+        assert_eq!(stats.artifact_count, 0);
+        assert_eq!(stats.max_size_bytes, 100 * 1024 * 1024);
+        cache.put(create_test_artifact("test-1")).unwrap();
+        let stats_after = cache.stats();
+        assert_eq!(stats_after.artifact_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_cache_empty_artifact_id() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ArtifactCache::new(temp_dir.path().to_path_buf(), 24, 100).unwrap();
+        let result = cache.get("").unwrap();
+        assert!(result.is_none());
+    }
+}
