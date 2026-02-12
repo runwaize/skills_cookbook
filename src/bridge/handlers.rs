@@ -1,7 +1,7 @@
 use super::auth::BridgeAuth;
 use crate::relay::RelayState;
 use axum::{
-    extract::{Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[cfg(feature = "custom-protocol")]
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 #[cfg(feature = "custom-protocol")]
 use tauri_plugin_updater::UpdaterExt;
@@ -40,26 +40,27 @@ async fn show_confirmation_dialog(
     message: &str,
     kind: MessageDialogKind,
 ) -> bool {
-    app_handle
-        .run_on_main_thread(|| {
-            tauri::async_runtime::block_on(async {
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    window
-                        .dialog()
-                        .message(message)
-                        .title(title)
-                        .kind(kind)
-                        .buttons(MessageDialogButtons::OkCancel)
-                        .show()
-                        .await
-                        .unwrap_or(false)
-                } else {
-                    false
-                }
-            })
-        })
-        .await
-        .unwrap_or(false)
+    let title = title.to_string();
+    let message = message.to_string();
+    let app_handle = app_handle.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_for_closure = app_handle.clone();
+    let _ = app_handle.run_on_main_thread(move || {
+        if let Some(window) = app_for_closure.get_webview_window("main") {
+            window
+                .dialog()
+                .message(&message)
+                .title(&title)
+                .kind(kind)
+                .buttons(MessageDialogButtons::OkCancel)
+                .show(move |result| {
+                    let _ = tx.send(result);
+                });
+        } else {
+            let _ = tx.send(false);
+        }
+    });
+    rx.recv().unwrap_or(false)
 }
 
 #[derive(Clone)]
@@ -153,25 +154,19 @@ pub async fn cache_clear(State(state): State<Arc<BridgeState>>) -> impl IntoResp
     }
 }
 
-#[derive(Deserialize)]
-pub struct VariablesCheckQuery {
-    pub skill_id: Option<String>,
-}
-
-pub async fn variables_check(
-    State(state): State<Arc<BridgeState>>,
-    Query(q): Query<VariablesCheckQuery>,
+#[allow(dead_code)]
+async fn variables_check_impl(
+    state: Arc<BridgeState>,
+    skill_id: String,
 ) -> impl IntoResponse {
-    let skill_id = match &q.skill_id {
-        Some(id) if !id.is_empty() => id.as_str(),
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "missing or empty skill_id"})),
-            )
-                .into_response()
-        }
-    };
+    let skill_id = skill_id.trim();
+    if skill_id.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "missing or empty skill_id"})),
+        )
+            .into_response();
+    }
     match state.relay_state.check_missing_variables(skill_id).await {
         Ok(missing) => Json(serde_json::json!({ "missing_variables": missing })).into_response(),
         Err(e) => (
@@ -180,6 +175,14 @@ pub async fn variables_check(
         )
             .into_response(),
     }
+}
+
+#[allow(dead_code)]
+pub async fn variables_check(
+    State(state): State<Arc<BridgeState>>,
+    Path(skill_id): Path<String>,
+) -> impl IntoResponse {
+    variables_check_impl(state, skill_id).await
 }
 
 pub async fn expose(
@@ -300,11 +303,8 @@ async fn apply_update_internal(app: &AppHandle) -> Result<(), String> {
         .download_and_install(|_, _| {}, || {})
         .await
         .map_err(|e| format!("Update download/install failed: {}", e))?;
-    
-    tauri_plugin_process::restart(&app.env())
-        .map_err(|e| format!("Restart failed: {}", e))?;
-    
-    Ok(())
+
+    tauri::process::restart(&app.env());
 }
 
 pub async fn update_apply(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {

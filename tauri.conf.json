@@ -5,13 +5,16 @@
   "identifier": "com.supervaize.skill-cookbook-relay",
   "build": {
     "beforeDevCommand": "",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5175",
     "beforeBuildCommand": "",
     "frontendDist": "ui"
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app"],
+    "targets": [
+      "dmg",
+      "app"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -33,7 +36,9 @@
       "csp": "default-src 'self' https://skills.runwaize.com http://127.0.0.1:9123; script-src 'self' 'unsafe-inline' https://skills.runwaize.com; style-src 'self' 'unsafe-inline' https://skills.runwaize.com; connect-src 'self' https://skills.runwaize.com http://127.0.0.1:9123",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$RESOURCE/**"]
+        "scope": [
+          "$RESOURCE/**"
+        ]
       }
     },
     "windows": [
@@ -43,7 +48,7 @@
         "height": 800,
         "resizable": true,
         "fullscreen": false,
-        "visible": false,
+        "visible": true,
         "hiddenTitle": false,
         "decorations": true,
         "url": "https://skills.runwaize.com"

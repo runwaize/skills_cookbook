@@ -294,12 +294,18 @@ tail -f ~/Library/Logs/skill-cookbook-relay/relay.log
 ```bash
 # Run all tests
 cargo test
+# Or via justfile:
+just test
+
+# Run full delivery pipeline test cycle (format + lint + test)
+just test-delivery
 
 # Run specific test module
 cargo test crypto_tests
 
 # Run with output
 cargo test -- --nocapture
+just test-verbose
 ```
 
 ### Debug Mode

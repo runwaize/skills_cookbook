@@ -8,7 +8,6 @@ use crate::types::*;
 use crate::variables::VariableResolver;
 use chrono::Utc;
 use parking_lot::RwLock;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 pub struct RelayState {
@@ -59,6 +58,11 @@ impl RelayState {
         state.spawn_sync_task();
 
         Ok(state)
+    }
+
+    /// Check if user is authenticated (sync, for startup routing)
+    pub fn is_authenticated(&self) -> bool {
+        self.auth_manager.is_authenticated()
     }
 
     /// Get current relay status

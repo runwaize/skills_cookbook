@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(relay_state)
+        .manage(relay_state.clone())
         .invoke_handler(tauri::generate_handler![
             get_relay_status,
             login_to_rss,
@@ -109,13 +109,7 @@ async fn main() -> Result<()> {
             clear_cache,
             wipe_all_data,
         ])
-        .setup(|app| {
-            // Spawn bridge server task (with AppHandle for updater)
-            let bridge_relay_state = relay_state.clone();
-            let bridge_token = session_token.clone();
-            let bridge_port = config.bridge_port;
-            let bridge_origin = Some(config.skills_web_url.clone());
-            let app_handle = app.handle().clone();
+        .setup(move |app| {
             #[cfg(feature = "custom-protocol")]
             {
                 let bridge_relay_state = relay_state.clone();
@@ -158,12 +152,16 @@ async fn main() -> Result<()> {
             }
 
             // Set window URL from config (or env var for dev)
-            let web_url = std::env::var("TAURI_DEV_WEB")
-                .unwrap_or_else(|_| {
-                    config::Config::load()
-                        .map(|c| c.skills_web_url)
-                        .unwrap_or_else(|_| "https://skills.runwaize.com".to_string())
-                });
+            let base_url = std::env::var("TAURI_DEV_WEB").unwrap_or_else(|_| {
+                config::Config::load()
+                    .map(|c| c.skills_web_url)
+                    .unwrap_or_else(|_| "https://skills.runwaize.com".to_string())
+            });
+            let initial_path = relay_state
+                .is_authenticated()
+                .then(|| "/inbox".to_string())
+                .unwrap_or_else(|| "/account/login".to_string());
+            let web_url = format!("{}{}", base_url.trim_end_matches('/'), initial_path);
             if let Some(window) = app.get_webview_window("main") {
                 if let Err(e) = window.navigate(tauri::Url::parse(&web_url).unwrap_or_else(|_| {
                     tauri::Url::parse("https://skills.runwaize.com").unwrap()

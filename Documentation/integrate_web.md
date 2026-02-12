@@ -99,7 +99,7 @@ Requirements:
 • GET /bridge/status → relay/mcp state, last sync, cache size
 • POST /bridge/refresh → trigger sync
 • POST /bridge/cache/clear
-• GET /bridge/variables/check?skill_id=... → missing vars list (no values)
+• GET /bridge/variables/check/:skill_id → missing vars list (no values)
 • POST /bridge/expose → set allowlist for libraries/skills
 • GET /bridge/logs/export → downloadable bundle (redacted)
 • GET /bridge/update/status → current app version, update available

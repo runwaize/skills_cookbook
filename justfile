@@ -24,6 +24,13 @@ test:
 test-verbose:
     cargo test -- --nocapture
 
+# Run full test cycle (format, lint, test) for skills delivery pipeline
+test-delivery:
+    just fmt-check
+    just lint
+    just test
+    @echo "✅ Skills Cookbook relay tests passed!"
+
 # Run specific test
 test-one TEST:
     cargo test {{TEST}} -- --nocapture
@@ -220,6 +227,10 @@ doctor:
     cargo tree --depth 1
     @echo "\n✅ Doctor check complete!"
 
+start-dev:
+    cargo tauri dev
+
+
 # Maintenance
 # ===========
 
@@ -240,3 +251,5 @@ setup: install-dev
     @echo "Setting up development environment..."
     rustup component add clippy rustfmt
     @echo "✅ Setup complete! Run 'just dev' to start developing."
+
+

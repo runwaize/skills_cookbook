@@ -101,11 +101,15 @@ pub struct ArtifactSignature {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Library {
+    #[serde(alias = "id")]
     pub library_id: String,
     pub name: String,
     pub description: Option<String>,
+    #[serde(alias = "scope")]
     pub visibility: Visibility,
+    #[serde(alias = "latest_approved_release_id")]
     pub latest_approved_release: Option<String>,
+    #[serde(default)]
     pub skills: Vec<SkillSummary>,
 }
 
@@ -120,6 +124,7 @@ pub enum Visibility {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillSummary {
+    #[serde(alias = "id")]
     pub skill_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -233,6 +238,7 @@ pub struct LatestApprovedResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatesSinceResponse {
     pub cursor: String,
+    #[serde(alias = "changes")]
     pub updates: Vec<ArtifactUpdate>,
 }
 

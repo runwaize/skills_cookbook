@@ -9,16 +9,15 @@ use axum::{
 };
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
+use tauri::AppHandle;
 
 use crate::bridge::handlers::BridgeState;
 use crate::relay::RelayState;
 
-#[cfg(feature = "custom-protocol")]
-use tauri::AppHandle;
-
 const BRIDGE_HOST: [u8; 4] = [127, 0, 0, 1];
 const PUBLIC_PATHS: &[&str] = &["/bridge/ping", "/bridge/handshake"];
 
+#[cfg(not(feature = "custom-protocol"))]
 pub async fn start_bridge(
     relay_state: Arc<RelayState>,
     session_token: String,
@@ -28,7 +27,7 @@ pub async fn start_bridge(
     start_bridge_with_app(relay_state, session_token, port, allowed_origin, None).await
 }
 
-#[cfg(feature = "custom-protocol")]
+#[cfg_attr(not(feature = "custom-protocol"), allow(unused_variables))]
 pub async fn start_bridge_with_app(
     relay_state: Arc<RelayState>,
     session_token: String,
@@ -42,6 +41,7 @@ pub async fn start_bridge_with_app(
         relay_state,
         auth: auth.clone(),
         version,
+        #[cfg(feature = "custom-protocol")]
         app_handle,
     });
 
@@ -50,13 +50,14 @@ pub async fn start_bridge_with_app(
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = Router::new()
+    let public = Router::new()
         .route("/bridge/ping", get(handlers::ping))
-        .route("/bridge/handshake", get(handlers::handshake))
+        .route("/bridge/handshake", get(handlers::handshake));
+
+    let private = Router::new()
         .route("/bridge/status", get(handlers::status))
         .route("/bridge/refresh", post(handlers::refresh))
         .route("/bridge/cache/clear", post(handlers::cache_clear))
-        .route("/bridge/variables/check", get(handlers::variables_check))
         .route("/bridge/expose", post(handlers::expose))
         .route("/bridge/logs/export", get(handlers::logs_export))
         .route("/bridge/update/status", get(handlers::update_status))
@@ -64,7 +65,10 @@ pub async fn start_bridge_with_app(
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_bridge_auth_conditional,
-        ))
+        ));
+
+    let app = public
+        .merge(private)
         .layer(cors)
         .with_state(state);
 
