@@ -128,8 +128,9 @@ impl Config {
 
             // Ensure parent directory exists
             if let Some(parent) = device_id_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| RelayError::Config(format!("Failed to create device ID dir: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    RelayError::Config(format!("Failed to create device ID dir: {}", e))
+                })?;
             }
 
             std::fs::write(&device_id_path, &device_id)

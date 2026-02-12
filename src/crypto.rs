@@ -1,8 +1,8 @@
 use crate::error::{RelayError, Result};
 use crate::types::Artifact;
+use base64::{engine::general_purpose, Engine as _};
 use ring::signature::{self, UnparsedPublicKey};
 use sha2::{Digest, Sha256};
-use base64::{Engine as _, engine::general_purpose};
 
 /// Verify artifact signature and content hash
 pub fn verify_artifact(artifact: &Artifact, public_key_pem: &str) -> Result<()> {
@@ -59,7 +59,8 @@ fn verify_signature(artifact: &Artifact, public_key_pem: &str) -> Result<()> {
     );
 
     // Decode signature from base64
-    let signature_bytes = general_purpose::STANDARD.decode(&artifact.signature.signature)
+    let signature_bytes = general_purpose::STANDARD
+        .decode(&artifact.signature.signature)
         .map_err(|e| RelayError::InvalidSignature(format!("Invalid signature encoding: {}", e)))?;
 
     // Parse public key
@@ -71,13 +72,18 @@ fn verify_signature(artifact: &Artifact, public_key_pem: &str) -> Result<()> {
             let public_key = UnparsedPublicKey::new(&signature::ED25519, &public_key_der);
             public_key
                 .verify(message.as_bytes(), &signature_bytes)
-                .map_err(|_| RelayError::InvalidSignature("Signature verification failed".to_string()))?;
+                .map_err(|_| {
+                    RelayError::InvalidSignature("Signature verification failed".to_string())
+                })?;
         }
         "RSA_PSS_SHA256" => {
-            let public_key = UnparsedPublicKey::new(&signature::RSA_PSS_2048_8192_SHA256, &public_key_der);
+            let public_key =
+                UnparsedPublicKey::new(&signature::RSA_PSS_2048_8192_SHA256, &public_key_der);
             public_key
                 .verify(message.as_bytes(), &signature_bytes)
-                .map_err(|_| RelayError::InvalidSignature("Signature verification failed".to_string()))?;
+                .map_err(|_| {
+                    RelayError::InvalidSignature("Signature verification failed".to_string())
+                })?;
         }
         algo => {
             return Err(RelayError::InvalidSignature(format!(
@@ -87,7 +93,10 @@ fn verify_signature(artifact: &Artifact, public_key_pem: &str) -> Result<()> {
         }
     }
 
-    tracing::debug!("Signature verified successfully for artifact {}", artifact.artifact_id);
+    tracing::debug!(
+        "Signature verified successfully for artifact {}",
+        artifact.artifact_id
+    );
 
     Ok(())
 }
@@ -133,7 +142,8 @@ fn parse_pem_public_key(pem: &str) -> Result<Vec<u8>> {
 
     let pem_data = pem_lines.join("");
 
-    general_purpose::STANDARD.decode(&pem_data)
+    general_purpose::STANDARD
+        .decode(&pem_data)
         .map_err(|e| RelayError::InvalidSignature(format!("Invalid PEM encoding: {}", e)))
 }
 

@@ -34,9 +34,7 @@ async fn login_to_rss(
 }
 
 #[tauri::command]
-async fn logout_from_rss(
-    state: tauri::State<'_, Arc<RelayState>>,
-) -> Result<(), String> {
+async fn logout_from_rss(state: tauri::State<'_, Arc<RelayState>>) -> Result<(), String> {
     state.logout().await.map_err(|e| e.to_string())
 }
 
@@ -55,16 +53,12 @@ async fn list_libraries(
 }
 
 #[tauri::command]
-async fn clear_cache(
-    state: tauri::State<'_, Arc<RelayState>>,
-) -> Result<(), String> {
+async fn clear_cache(state: tauri::State<'_, Arc<RelayState>>) -> Result<(), String> {
     state.clear_cache().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn wipe_all_data(
-    state: tauri::State<'_, Arc<RelayState>>,
-) -> Result<(), String> {
+async fn wipe_all_data(state: tauri::State<'_, Arc<RelayState>>) -> Result<(), String> {
     state.wipe_all_data().await.map_err(|e| e.to_string())
 }
 
@@ -112,12 +106,16 @@ async fn main() -> Result<()> {
             // Set up system tray
             #[cfg(desktop)]
             {
-                use tauri::tray::{TrayIconBuilder, MouseButton};
+                use tauri::tray::{MouseButton, TrayIconBuilder};
 
                 let _tray = TrayIconBuilder::new()
                     .tooltip("Skill Cookbook Relay")
                     .on_tray_icon_event(|tray, event| {
-                        if let tauri::tray::TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
+                        if let tauri::tray::TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            ..
+                        } = event
+                        {
                             if let Some(window) = tray.app_handle().get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();

@@ -3,8 +3,8 @@ use crate::error::{RelayError, Result};
 use crate::types::TokenPair;
 use chrono::{Duration, Utc};
 use oauth2::{
-    basic::BasicClient, AuthUrl, ClientId, DeviceAuthorizationUrl, RefreshToken,
-    Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, ClientId, DeviceAuthorizationUrl, RefreshToken, Scope,
+    TokenResponse, TokenUrl,
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -111,9 +111,10 @@ impl AuthManager {
 
             // In oauth2 v4, we need to build the full device flow manually
             // For simplicity, we'll use the basic token endpoint directly
-            let token_url = self.oauth_client.token_url().ok_or_else(|| {
-                RelayError::Auth("No token URL configured".to_string())
-            })?;
+            let token_url = self
+                .oauth_client
+                .token_url()
+                .ok_or_else(|| RelayError::Auth("No token URL configured".to_string()))?;
 
             let params = [
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
@@ -122,7 +123,8 @@ impl AuthManager {
             ];
 
             let client = reqwest::Client::new();
-            let response = client.post(token_url.as_str())
+            let response = client
+                .post(token_url.as_str())
                 .form(&params)
                 .send()
                 .await
@@ -135,19 +137,32 @@ impl AuthManager {
                     tokio::time::sleep(interval).await;
                     continue;
                 }
-                return Err(RelayError::Auth(format!("Token request failed with status: {}", status)));
+                return Err(RelayError::Auth(format!(
+                    "Token request failed with status: {}",
+                    status
+                )));
             }
 
             match response.json::<serde_json::Value>().await {
                 Ok(json) if json.get("access_token").is_some() => {
-                    let access_token = json["access_token"].as_str()
+                    let access_token = json["access_token"]
+                        .as_str()
                         .ok_or_else(|| RelayError::Auth("Invalid access token".to_string()))?
                         .to_string();
-                    let refresh_token = json.get("refresh_token").and_then(|t| t.as_str())
+                    let refresh_token = json
+                        .get("refresh_token")
+                        .and_then(|t| t.as_str())
                         .ok_or_else(|| RelayError::Auth("No refresh token received".to_string()))?
                         .to_string();
-                    let expires_in = json.get("expires_in").and_then(|e| e.as_u64()).unwrap_or(3600);
-                    let token_type = json.get("token_type").and_then(|t| t.as_str()).unwrap_or("Bearer").to_string();
+                    let expires_in = json
+                        .get("expires_in")
+                        .and_then(|e| e.as_u64())
+                        .unwrap_or(3600);
+                    let token_type = json
+                        .get("token_type")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Bearer")
+                        .to_string();
 
                     let expires_at = Utc::now() + Duration::seconds(expires_in as i64);
 
@@ -172,7 +187,10 @@ impl AuthManager {
                     continue;
                 }
                 Err(e) => {
-                    return Err(RelayError::Auth(format!("Failed to parse token response: {}", e)));
+                    return Err(RelayError::Auth(format!(
+                        "Failed to parse token response: {}",
+                        e
+                    )));
                 }
             }
         }
@@ -195,7 +213,9 @@ impl AuthManager {
             .await
             .map_err(|e| RelayError::Auth(format!("Token refresh failed: {}", e)))?;
 
-        let expires_in = token_response.expires_in().unwrap_or(std::time::Duration::from_secs(3600));
+        let expires_in = token_response
+            .expires_in()
+            .unwrap_or(std::time::Duration::from_secs(3600));
         let expires_at = Utc::now() + Duration::seconds(expires_in.as_secs() as i64);
 
         let new_token_pair = TokenPair {

@@ -1,12 +1,7 @@
 use crate::error::Result;
 use crate::relay::RelayState;
-use crate::types::{McpRequest, McpResponse, McpError};
-use axum::{
-    extract::State,
-    routing::post,
-    Router,
-    Json,
-};
+use crate::types::{McpError, McpRequest, McpResponse};
+use axum::{extract::State, routing::post, Json, Router};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
@@ -34,7 +29,11 @@ async fn handle_mcp_request(
     State(relay_state): State<Arc<RelayState>>,
     Json(request): Json<McpRequest>,
 ) -> Json<McpResponse> {
-    tracing::debug!("MCP request: method={}, id={:?}", request.method, request.id);
+    tracing::debug!(
+        "MCP request: method={}, id={:?}",
+        request.method,
+        request.id
+    );
 
     let result = match request.method.as_str() {
         "skills.list" => super::handlers::list_skills(relay_state, request.params).await,
@@ -43,7 +42,10 @@ async fn handle_mcp_request(
         "libraries.get" => super::handlers::get_library(relay_state, request.params).await,
         "skills.status" => super::handlers::get_status(relay_state, request.params).await,
         "skills.refresh" => super::handlers::refresh_skills(relay_state, request.params).await,
-        _ => Err(crate::error::RelayError::Mcp(format!("Unknown method: {}", request.method))),
+        _ => Err(crate::error::RelayError::Mcp(format!(
+            "Unknown method: {}",
+            request.method
+        ))),
     };
 
     Json(match result {

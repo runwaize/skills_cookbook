@@ -4,10 +4,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 /// Handle skills.list MCP method
-pub async fn list_skills(
-    relay_state: Arc<RelayState>,
-    params: Option<Value>,
-) -> Result<Value> {
+pub async fn list_skills(relay_state: Arc<RelayState>, params: Option<Value>) -> Result<Value> {
     let library_id = params
         .as_ref()
         .and_then(|p| p.get("library_id"))
@@ -20,10 +17,7 @@ pub async fn list_skills(
 }
 
 /// Handle skills.get MCP method
-pub async fn get_skill(
-    relay_state: Arc<RelayState>,
-    params: Option<Value>,
-) -> Result<Value> {
+pub async fn get_skill(relay_state: Arc<RelayState>, params: Option<Value>) -> Result<Value> {
     let params = params.ok_or_else(|| {
         crate::error::RelayError::Mcp("Missing parameters for skills.get".to_string())
     })?;
@@ -47,20 +41,14 @@ pub async fn get_skill(
 }
 
 /// Handle libraries.list MCP method
-pub async fn list_libraries(
-    relay_state: Arc<RelayState>,
-    _params: Option<Value>,
-) -> Result<Value> {
+pub async fn list_libraries(relay_state: Arc<RelayState>, _params: Option<Value>) -> Result<Value> {
     let libraries = relay_state.list_libraries().await?;
 
     Ok(serde_json::to_value(libraries)?)
 }
 
 /// Handle libraries.get MCP method
-pub async fn get_library(
-    relay_state: Arc<RelayState>,
-    params: Option<Value>,
-) -> Result<Value> {
+pub async fn get_library(relay_state: Arc<RelayState>, params: Option<Value>) -> Result<Value> {
     let params = params.ok_or_else(|| {
         crate::error::RelayError::Mcp("Missing parameters for libraries.get".to_string())
     })?;
@@ -68,9 +56,7 @@ pub async fn get_library(
     let library_id = params
         .get("library_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            crate::error::RelayError::Mcp("Missing library_id parameter".to_string())
-        })?;
+        .ok_or_else(|| crate::error::RelayError::Mcp("Missing library_id parameter".to_string()))?;
 
     let release = params
         .get("release")
@@ -83,20 +69,14 @@ pub async fn get_library(
 }
 
 /// Handle skills.status MCP method
-pub async fn get_status(
-    relay_state: Arc<RelayState>,
-    _params: Option<Value>,
-) -> Result<Value> {
+pub async fn get_status(relay_state: Arc<RelayState>, _params: Option<Value>) -> Result<Value> {
     let status = relay_state.get_status().await?;
 
     Ok(serde_json::to_value(status)?)
 }
 
 /// Handle skills.refresh MCP method
-pub async fn refresh_skills(
-    relay_state: Arc<RelayState>,
-    _params: Option<Value>,
-) -> Result<Value> {
+pub async fn refresh_skills(relay_state: Arc<RelayState>, _params: Option<Value>) -> Result<Value> {
     let result = relay_state.refresh_skills().await?;
 
     Ok(serde_json::to_value(result)?)

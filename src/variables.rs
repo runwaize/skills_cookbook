@@ -34,7 +34,11 @@ impl VariableResolver {
                             schema.name, e
                         )));
                     } else {
-                        tracing::warn!("Optional variable '{}' could not be resolved: {}", schema.name, e);
+                        tracing::warn!(
+                            "Optional variable '{}' could not be resolved: {}",
+                            schema.name,
+                            e
+                        );
                     }
                 }
             }
@@ -85,7 +89,10 @@ impl VariableResolver {
         // Try 1Password if configured
         if schema.is_secret {
             if let Ok(value) = self.get_from_1password(&schema.name).await {
-                return Ok((serde_json::Value::String(value), VariableSource::OnePassword));
+                return Ok((
+                    serde_json::Value::String(value),
+                    VariableSource::OnePassword,
+                ));
             }
         }
 
@@ -105,7 +112,11 @@ impl VariableResolver {
         &self,
         schema: &VariableSchema,
     ) -> Result<(serde_json::Value, VariableSource)> {
-        let workspace_key = format!("workspace_{}_{}", self.workspace_id.as_deref().unwrap_or("default"), schema.name);
+        let workspace_key = format!(
+            "workspace_{}_{}",
+            self.workspace_id.as_deref().unwrap_or("default"),
+            schema.name
+        );
 
         if schema.is_secret {
             if let Ok(value) = self.get_from_keychain(&workspace_key).await {
@@ -122,7 +133,11 @@ impl VariableResolver {
         &self,
         schema: &VariableSchema,
     ) -> Result<(serde_json::Value, VariableSource)> {
-        let project_key = format!("project_{}_{}", self.project_id.as_deref().unwrap_or("default"), schema.name);
+        let project_key = format!(
+            "project_{}_{}",
+            self.project_id.as_deref().unwrap_or("default"),
+            schema.name
+        );
 
         if schema.is_secret {
             if let Ok(value) = self.get_from_keychain(&project_key).await {
@@ -176,7 +191,9 @@ impl VariableResolver {
         }
 
         let value = String::from_utf8(output.stdout)
-            .map_err(|e| RelayError::VariableResolution(format!("Invalid UTF-8 from op CLI: {}", e)))?
+            .map_err(|e| {
+                RelayError::VariableResolution(format!("Invalid UTF-8 from op CLI: {}", e))
+            })?
             .trim()
             .to_string();
 
@@ -200,10 +217,18 @@ impl VariableResolver {
         let key = match scope {
             VariableScope::Personal => name.to_string(),
             VariableScope::Workspace => {
-                format!("workspace_{}_{}", self.workspace_id.as_deref().unwrap_or("default"), name)
+                format!(
+                    "workspace_{}_{}",
+                    self.workspace_id.as_deref().unwrap_or("default"),
+                    name
+                )
             }
             VariableScope::Project => {
-                format!("project_{}_{}", self.project_id.as_deref().unwrap_or("default"), name)
+                format!(
+                    "project_{}_{}",
+                    self.project_id.as_deref().unwrap_or("default"),
+                    name
+                )
             }
         };
 
@@ -214,7 +239,11 @@ impl VariableResolver {
             .set_password(value)
             .map_err(|e| RelayError::Keychain(format!("Failed to store in keychain: {}", e)))?;
 
-        tracing::info!("Stored variable '{}' in keychain (scope: {:?})", name, scope);
+        tracing::info!(
+            "Stored variable '{}' in keychain (scope: {:?})",
+            name,
+            scope
+        );
 
         Ok(())
     }
@@ -224,10 +253,18 @@ impl VariableResolver {
         let key = match scope {
             VariableScope::Personal => name.to_string(),
             VariableScope::Workspace => {
-                format!("workspace_{}_{}", self.workspace_id.as_deref().unwrap_or("default"), name)
+                format!(
+                    "workspace_{}_{}",
+                    self.workspace_id.as_deref().unwrap_or("default"),
+                    name
+                )
             }
             VariableScope::Project => {
-                format!("project_{}_{}", self.project_id.as_deref().unwrap_or("default"), name)
+                format!(
+                    "project_{}_{}",
+                    self.project_id.as_deref().unwrap_or("default"),
+                    name
+                )
             }
         };
 
@@ -238,7 +275,11 @@ impl VariableResolver {
             .delete_password()
             .map_err(|e| RelayError::Keychain(format!("Failed to delete from keychain: {}", e)))?;
 
-        tracing::info!("Deleted variable '{}' from keychain (scope: {:?})", name, scope);
+        tracing::info!(
+            "Deleted variable '{}' from keychain (scope: {:?})",
+            name,
+            scope
+        );
 
         Ok(())
     }
@@ -268,7 +309,10 @@ mod tests {
 
         let resolved = result.unwrap();
         assert_eq!(resolved.name, "TEST_VAR");
-        assert_eq!(resolved.value, serde_json::Value::String("test_value".to_string()));
+        assert_eq!(
+            resolved.value,
+            serde_json::Value::String("test_value".to_string())
+        );
         assert_eq!(resolved.source, VariableSource::Environment);
 
         env::remove_var("TEST_VAR");

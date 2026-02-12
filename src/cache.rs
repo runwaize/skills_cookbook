@@ -60,7 +60,9 @@ impl ArtifactCache {
                     tracing::debug!("Cache hit (disk): {}", artifact_id);
 
                     // Update in-memory cache
-                    self.in_memory.write().insert(artifact_id.to_string(), cached.clone());
+                    self.in_memory
+                        .write()
+                        .insert(artifact_id.to_string(), cached.clone());
 
                     Ok(Some(cached.artifact))
                 } else {
@@ -85,7 +87,9 @@ impl ArtifactCache {
         };
 
         // Store in memory
-        self.in_memory.write().insert(artifact.artifact_id.clone(), cached.clone());
+        self.in_memory
+            .write()
+            .insert(artifact.artifact_id.clone(), cached.clone());
 
         // Store on disk
         let key = format!("artifact:{}", artifact.artifact_id);
@@ -200,7 +204,9 @@ impl ArtifactCache {
 
         // Update on disk
         let key = format!("artifact:{}", artifact_id);
-        if let Some(data) = self.db.get(&key)
+        if let Some(data) = self
+            .db
+            .get(&key)
             .map_err(|e| RelayError::Cache(format!("Cache read error: {}", e)))?
         {
             let mut cached: CachedArtifact = bincode::deserialize(&data)
@@ -211,7 +217,8 @@ impl ArtifactCache {
             let updated_data = bincode::serialize(&cached)
                 .map_err(|e| RelayError::Cache(format!("Failed to serialize: {}", e)))?;
 
-            self.db.insert(&key, updated_data)
+            self.db
+                .insert(&key, updated_data)
                 .map_err(|e| RelayError::Cache(format!("Failed to update cache: {}", e)))?;
         }
 

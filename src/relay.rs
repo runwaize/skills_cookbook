@@ -66,7 +66,12 @@ impl RelayState {
         let authenticated = self.auth_manager.is_authenticated();
 
         let library_count = if authenticated {
-            self.rss_client.list_libraries().await.ok().map(|l| l.len()).unwrap_or(0)
+            self.rss_client
+                .list_libraries()
+                .await
+                .ok()
+                .map(|l| l.len())
+                .unwrap_or(0)
         } else {
             0
         };
@@ -74,7 +79,7 @@ impl RelayState {
         Ok(RelayStatus {
             connected: authenticated,
             authenticated,
-            user_email: None, // TODO: Get from token claims
+            user_email: None,   // TODO: Get from token claims
             workspace_id: None, // TODO: Get from token claims
             last_sync: *self.last_sync.read(),
             cache_size_bytes: cache_stats.size_bytes,
@@ -91,13 +96,15 @@ impl RelayState {
         let device_response = self.auth_manager.start_device_flow().await?;
 
         // Display user code and URL
-        tracing::info!("Please visit {} and enter code: {}",
+        tracing::info!(
+            "Please visit {} and enter code: {}",
             device_response.verification_uri,
             device_response.user_code
         );
 
         // Poll for completion
-        let token_pair = self.auth_manager
+        let token_pair = self
+            .auth_manager
             .poll_device_flow(device_response.device_code, device_response.interval)
             .await?;
 
@@ -106,7 +113,7 @@ impl RelayState {
 
         Ok(AuthStatus {
             authenticated: true,
-            user_email: None, // TODO: Extract from token
+            user_email: None,   // TODO: Extract from token
             workspace_id: None, // TODO: Extract from token
             expires_at: Some(token_pair.expires_at),
         })
@@ -153,7 +160,10 @@ impl RelayState {
         let latest = if version == "latest_approved" {
             self.rss_client.get_latest_approved_skill(skill_id).await?
         } else {
-            return Err(RelayError::Internal(format!("Version '{}' not supported yet", version)));
+            return Err(RelayError::Internal(format!(
+                "Version '{}' not supported yet",
+                version
+            )));
         };
 
         // Check cache first
@@ -168,7 +178,11 @@ impl RelayState {
                 return Err(RelayError::ArtifactRevoked(format!(
                     "Artifact {} has been revoked: {}",
                     latest.artifact_id,
-                    cached_artifact.metadata.revoked_reason.as_deref().unwrap_or("No reason provided")
+                    cached_artifact
+                        .metadata
+                        .revoked_reason
+                        .as_deref()
+                        .unwrap_or("No reason provided")
                 )));
             }
 
@@ -190,7 +204,11 @@ impl RelayState {
             return Err(RelayError::ArtifactRevoked(format!(
                 "Artifact {} has been revoked: {}",
                 latest.artifact_id,
-                artifact.metadata.revoked_reason.as_deref().unwrap_or("No reason provided")
+                artifact
+                    .metadata
+                    .revoked_reason
+                    .as_deref()
+                    .unwrap_or("No reason provided")
             )));
         }
 
@@ -295,9 +313,8 @@ impl RelayState {
             }
         };
 
-        let key = signing_key.ok_or_else(|| {
-            RelayError::Verification("Signing key not available".to_string())
-        })?;
+        let key = signing_key
+            .ok_or_else(|| RelayError::Verification("Signing key not available".to_string()))?;
 
         crypto::verify_artifact(artifact, &key)?;
 
@@ -321,9 +338,8 @@ impl RelayState {
         let state = Arc::new(self.clone_for_sync());
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                std::time::Duration::from_secs(interval_minutes * 60)
-            );
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(interval_minutes * 60));
 
             loop {
                 interval.tick().await;

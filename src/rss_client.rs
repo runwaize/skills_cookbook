@@ -38,8 +38,14 @@ impl RssClient {
 
     /// Get latest approved release for a library
     #[allow(dead_code)]
-    pub async fn get_latest_approved_library_release(&self, library_id: &str) -> Result<LatestApprovedResponse> {
-        let url = format!("{}/libraries/{}/releases/latest-approved", self.base_url, library_id);
+    pub async fn get_latest_approved_library_release(
+        &self,
+        library_id: &str,
+    ) -> Result<LatestApprovedResponse> {
+        let url = format!(
+            "{}/libraries/{}/releases/latest-approved",
+            self.base_url, library_id
+        );
         self.get(&url).await
     }
 
@@ -50,7 +56,10 @@ impl RssClient {
     }
 
     /// Get latest approved version of a skill
-    pub async fn get_latest_approved_skill(&self, skill_id: &str) -> Result<LatestApprovedResponse> {
+    pub async fn get_latest_approved_skill(
+        &self,
+        skill_id: &str,
+    ) -> Result<LatestApprovedResponse> {
         let url = format!("{}/skills/{}/latest-approved", self.base_url, skill_id);
         self.get(&url).await
     }
@@ -151,7 +160,9 @@ impl RssClient {
             }
         }
 
-        Err(RelayError::Verification("No valid signing key found".to_string()))
+        Err(RelayError::Verification(
+            "No valid signing key found".to_string(),
+        ))
     }
 
     /// Generic GET request with authentication
@@ -171,7 +182,9 @@ impl RssClient {
             let error_text = response.text().await.unwrap_or_default();
 
             if status.as_u16() == 401 {
-                return Err(RelayError::Auth("Unauthorized - token may be expired".to_string()));
+                return Err(RelayError::Auth(
+                    "Unauthorized - token may be expired".to_string(),
+                ));
             }
 
             return Err(RelayError::Internal(format!(
@@ -180,9 +193,6 @@ impl RssClient {
             )));
         }
 
-        response
-            .json()
-            .await
-            .map_err(RelayError::Network)
+        response.json().await.map_err(RelayError::Network)
     }
 }
