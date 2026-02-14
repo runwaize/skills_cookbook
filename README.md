@@ -14,7 +14,8 @@ Skill Cookbook Relay is a lightweight desktop application that acts as a secure 
 - 🔑 **Secret Management** - Resolves credentials from keychain, environment, or 1Password
 - 🚀 **MCP Server** - Exposes skills via standardized Model Context Protocol
 - 💾 **Smart Caching** - Local artifact cache with integrity verification
-- 🎨 **Native UI** - System tray app with dashboard for monitoring
+- 🎨 **Native UI** - System tray app with context menu and about dialog
+- 🛠️ **Local Dev Mode** - Run against a local web frontend via `TAURI_DEV_WEB` env var
 
 ## Architecture
 
@@ -85,8 +86,9 @@ cargo run --release
 ### 1. Launch the Relay
 
 Open Skill Cookbook Relay from your Applications folder. The app will:
+
 - Start the MCP server on `localhost:9876`
-- Show a system tray icon
+- Show a system tray icon with a context menu (About, Show Window, Quit)
 - Display the dashboard window
 
 ### 2. Connect Your Account
@@ -141,6 +143,7 @@ Agent: [Uses skills.get to fetch verified skill]
 ## Configuration
 
 Configuration file location:
+
 - **macOS**: `~/Library/Application Support/skill-cookbook-relay/config.toml`
 - **Linux**: `~/.config/skill-cookbook-relay/config.toml`
 - **Windows**: `%APPDATA%\skill-cookbook-relay\config.toml`
@@ -198,40 +201,49 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 The relay exposes these MCP methods:
 
 ### `skills.list`
+
 List available skills, optionally filtered by library.
 
 **Parameters:**
+
 - `library_id` (optional): Filter by library ID
 
 **Returns:** Array of skill summaries
 
 ### `skills.get`
+
 Get a specific skill with resolved variables.
 
 **Parameters:**
+
 - `skill_id` or `slug`: Skill identifier
 - `version` (optional): Version to fetch (default: "latest_approved")
 
 **Returns:** Complete artifact with metadata and payload
 
 ### `libraries.list`
+
 List all accessible libraries.
 
 **Returns:** Array of libraries with metadata
 
 ### `libraries.get`
+
 Get a specific library.
 
 **Parameters:**
+
 - `library_id`: Library identifier
 - `release` (optional): Release version (default: "latest_approved")
 
 ### `skills.status`
+
 Get relay status information.
 
 **Returns:** Status object with cache, sync, and connection info
 
 ### `skills.refresh`
+
 Force refresh skills from Skills Cookbook.
 
 **Returns:** Refresh result with update counts
@@ -241,6 +253,7 @@ Force refresh skills from Skills Cookbook.
 ### Cryptographic Verification
 
 Every skill artifact is:
+
 1. **Signed** by Skills Cookbook using RSA or ED25519
 2. **Hash-verified** using SHA-256
 3. **Approval-checked** to ensure it's in published state
@@ -265,6 +278,7 @@ If verification fails, the relay **fails closed** and refuses to serve the artif
 ### Relay won't start
 
 Check the logs:
+
 ```bash
 tail -f ~/Library/Logs/skill-cookbook-relay/relay.log
 ```
@@ -289,6 +303,20 @@ tail -f ~/Library/Logs/skill-cookbook-relay/relay.log
 
 ## Development
 
+### Running in Development
+
+```bash
+# Run against live skills.runwaize.com
+just dev
+
+# Run against a local web frontend (e.g. localhost:5175)
+just dev-local
+# Or manually:
+TAURI_DEV_WEB=http://localhost:5175 cargo tauri dev
+```
+
+The `TAURI_DEV_WEB` environment variable overrides the web frontend URL. When set, the system tray About dialog will show "Local Dev" instead of "Live" to indicate the active web source.
+
 ### Running Tests
 
 ```bash
@@ -311,6 +339,7 @@ just test-verbose
 ### Debug Mode
 
 Enable debug logging:
+
 ```toml
 # In config.toml
 debug_mode = true
@@ -318,6 +347,7 @@ log_level = "debug"
 ```
 
 Or via environment:
+
 ```bash
 RUST_LOG=debug cargo run
 ```
@@ -338,16 +368,20 @@ skill_cookbook/
 │   ├── rss_client.rs     # API client
 │   ├── types.rs          # Type definitions
 │   ├── variables.rs      # Secret resolution
+│   ├── bridge/
+│   │   ├── mod.rs
+│   │   └── handlers.rs   # Bridge REST API handlers
 │   └── mcp/
 │       ├── mod.rs
 │       ├── server.rs     # MCP HTTP server
 │       └── handlers.rs   # MCP method handlers
 ├── ui/
-│   ├── index.html        # Dashboard UI
+│   ├── index.html        # Offline fallback page
 │   ├── styles.css
 │   └── app.js
 ├── Cargo.toml
 ├── tauri.conf.json
+├── justfile              # Task runner (just)
 └── README.md
 ```
 

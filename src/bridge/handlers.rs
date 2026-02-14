@@ -217,6 +217,7 @@ pub async fn expose(
     }
 }
 
+#[allow(unused_variables)]
 pub async fn logs_export(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
     #[cfg(feature = "custom-protocol")]
     if let Some(app) = &state.app_handle {
@@ -307,6 +308,7 @@ async fn apply_update_internal(app: &AppHandle) -> Result<(), String> {
     tauri::process::restart(&app.env());
 }
 
+#[allow(unused_variables)]
 pub async fn update_apply(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
     #[cfg(feature = "custom-protocol")]
     if let Some(app) = &state.app_handle {

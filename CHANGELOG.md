@@ -14,6 +14,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- ✨ **Local dev mode**: New `just dev-local` command and `TAURI_DEV_WEB` env var to run the app against a local web frontend (e.g. `localhost:5175`) instead of the live `skills.runwaize.com`.
+- 🧑‍🎨 **System tray context menu**: Replaced the single left-click tray handler with a full context menu containing "About Skill Cookbook Relay", "Show Window", and "Quit" items.
+- 🧑‍🎨 **About dialog**: Tray menu "About" item shows app version and which web source (Live/Local Dev) is active.
+
+### Changed
+
+- 🦀 **Web source resolution**: Extracted URL resolution into a `WebSource` struct, centralizing the live-vs-local-dev decision early in startup instead of resolving it inline in multiple places.
+- 🏗️ **Justfile cleanup**: Removed duplicate `start-dev` recipe; clarified `dev` recipe description.
+
+### Fixed
+
+- 🐛 **Compiler warnings**: Added `#[allow(unused_variables)]` to `logs_export` and `update_apply` bridge handlers to suppress warnings when building without the `custom-protocol` feature flag.
+- 🐛 **Trailing newline**: Fixed missing trailing newline in `src/mcp/mod.rs`.
+
 ## [0.1.0] - 2026-02-12
 
 ### Added

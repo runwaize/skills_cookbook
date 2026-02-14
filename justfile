@@ -8,9 +8,13 @@ default:
 # Development commands
 # ====================
 
-# Run development server
+# Run development server (uses live skills.runwaize.com)
 dev:
     cargo tauri dev
+
+# Run development server against local web app (localhost:5175)
+dev-local:
+    TAURI_DEV_WEB=http://localhost:5175 cargo tauri dev
 
 # Check code for errors (fast)
 check:
@@ -226,10 +230,6 @@ doctor:
     @echo "\nChecking dependencies..."
     cargo tree --depth 1
     @echo "\n✅ Doctor check complete!"
-
-start-dev:
-    cargo tauri dev
-
 
 # Maintenance
 # ===========

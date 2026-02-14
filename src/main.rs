@@ -20,6 +20,28 @@ use std::sync::Arc;
 use tauri::Manager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// Tracks whether the app is using the live or local dev website.
+#[derive(Clone)]
+struct WebSource {
+    label: String,
+    url: String,
+}
+
+impl WebSource {
+    fn resolve(config: &config::Config) -> Self {
+        match std::env::var("TAURI_DEV_WEB") {
+            Ok(url) if !url.is_empty() => Self {
+                label: "Local Dev".to_string(),
+                url,
+            },
+            _ => Self {
+                label: "Live".to_string(),
+                url: config.skills_web_url.clone(),
+            },
+        }
+    }
+}
+
 #[tauri::command]
 async fn get_relay_status(
     state: tauri::State<'_, Arc<RelayState>>,
@@ -82,6 +104,10 @@ async fn main() -> Result<()> {
     let relay_state = Arc::new(RelayState::new(config.clone()).await?);
     tracing::info!("Relay state initialized");
 
+    // Resolve web source (live vs local dev)
+    let web_source = WebSource::resolve(&config);
+    tracing::info!("Web source: {} ({})", web_source.label, web_source.url);
+
     // Generate session token for bridge (will be used in setup)
     let session_token = uuid::Uuid::new_v4().to_string();
 
@@ -110,12 +136,14 @@ async fn main() -> Result<()> {
             wipe_all_data,
         ])
         .setup(move |app| {
+            let bridge_origin = Some(web_source.url.clone());
+
             #[cfg(feature = "custom-protocol")]
             {
                 let bridge_relay_state = relay_state.clone();
                 let bridge_token = session_token.clone();
                 let bridge_port = config.bridge_port;
-                let bridge_origin = Some(config.skills_web_url.clone());
+                let bridge_origin = bridge_origin.clone();
                 let app_handle = app.handle().clone();
                 tokio::spawn(async move {
                     if let Err(e) = bridge::start_bridge_with_app(
@@ -136,7 +164,7 @@ async fn main() -> Result<()> {
                 let bridge_relay_state = relay_state.clone();
                 let bridge_token = session_token.clone();
                 let bridge_port = config.bridge_port;
-                let bridge_origin = Some(config.skills_web_url.clone());
+                let bridge_origin = bridge_origin.clone();
                 tokio::spawn(async move {
                     if let Err(e) = bridge::start_bridge(
                         bridge_relay_state,
@@ -151,12 +179,8 @@ async fn main() -> Result<()> {
                 });
             }
 
-            // Set window URL from config (or env var for dev)
-            let base_url = std::env::var("TAURI_DEV_WEB").unwrap_or_else(|_| {
-                config::Config::load()
-                    .map(|c| c.skills_web_url)
-                    .unwrap_or_else(|_| "https://skills.runwaize.com".to_string())
-            });
+            // Navigate window to resolved web source
+            let base_url = &web_source.url;
             let initial_path = relay_state
                 .is_authenticated()
                 .then(|| "/inbox".to_string())
@@ -170,23 +194,61 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Set up system tray
+            // Set up system tray with About menu
             #[cfg(desktop)]
             {
-                use tauri::tray::{MouseButton, TrayIconBuilder};
+                use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+                use tauri::tray::TrayIconBuilder;
+
+                let about_label = format!(
+                    "Skill Cookbook Relay v{}\nWeb: {} ({})",
+                    env!("CARGO_PKG_VERSION"),
+                    web_source.label,
+                    web_source.url,
+                );
+
+                let about_item =
+                    MenuItemBuilder::with_id("about", "About Skill Cookbook Relay").build(app)?;
+                let show_item = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
+                let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+                let menu = MenuBuilder::new(app)
+                    .item(&about_item)
+                    .item(&PredefinedMenuItem::separator(app)?)
+                    .item(&show_item)
+                    .item(&quit_item)
+                    .build()?;
 
                 let _tray = TrayIconBuilder::new()
                     .tooltip("Skill Cookbook Relay")
-                    .on_tray_icon_event(|tray, event| {
-                        if let tauri::tray::TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            ..
-                        } = event
-                        {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                    .menu(&menu)
+                    .show_menu_on_left_click(true)
+                    .on_menu_event(move |app_handle, event| {
+                        match event.id().as_ref() {
+                            "about" => {
+                                let msg = about_label.clone();
+                                let handle = app_handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    use tauri_plugin_dialog::DialogExt;
+                                    if let Some(window) = handle.get_webview_window("main") {
+                                        window
+                                            .dialog()
+                                            .message(msg)
+                                            .title("About Skill Cookbook Relay")
+                                            .show(|_| {});
+                                    }
+                                });
                             }
+                            "show" => {
+                                if let Some(window) = app_handle.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                            "quit" => {
+                                app_handle.exit(0);
+                            }
+                            _ => {}
                         }
                     })
                     .build(app)?;
