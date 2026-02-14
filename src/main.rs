@@ -179,13 +179,18 @@ async fn main() -> Result<()> {
                 });
             }
 
-            // Navigate window to resolved web source
+            // Navigate window to resolved web source with tauri_version param
             let base_url = &web_source.url;
             let initial_path = relay_state
                 .is_authenticated()
                 .then(|| "/inbox".to_string())
                 .unwrap_or_else(|| "/account/login".to_string());
-            let web_url = format!("{}{}", base_url.trim_end_matches('/'), initial_path);
+            let web_url = format!(
+                "{}{}?tauri_version={}",
+                base_url.trim_end_matches('/'),
+                initial_path,
+                env!("CARGO_PKG_VERSION"),
+            );
             if let Some(window) = app.get_webview_window("main") {
                 if let Err(e) = window.navigate(tauri::Url::parse(&web_url).unwrap_or_else(|_| {
                     tauri::Url::parse("https://skills.runwaize.com").unwrap()

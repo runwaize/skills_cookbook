@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
 - ✨ **Local dev mode**: New `just dev-local` command and `TAURI_DEV_WEB` env var to run the app against a local web frontend (e.g. `localhost:5175`) instead of the live `skills.runwaize.com`.
 - 🧑‍🎨 **System tray context menu**: Replaced the single left-click tray handler with a full context menu containing "About Skill Cookbook Relay", "Show Window", and "Quit" items.
 - 🧑‍🎨 **About dialog**: Tray menu "About" item shows app version and which web source (Live/Local Dev) is active.
+- 🦀 **`tauri_version` query parameter**: WebView URL now includes `?tauri_version=X.Y.Z` on startup so the web app can detect it's running inside Tauri and enable bridge communication.
 
 ### Changed
 

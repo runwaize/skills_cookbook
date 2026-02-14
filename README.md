@@ -54,6 +54,10 @@ Skill Cookbook Relay is a lightweight desktop application that acts as a secure 
 └─────────────────────────────────────────┘
 ```
 
+### Bridge Detection
+
+The web app at `skills.runwaize.com` only attempts to communicate with the local bridge (`127.0.0.1:9123`) when a `tauri_version` query parameter is present on the initial page load. The Tauri app appends `?tauri_version=X.Y.Z` automatically. When the page is opened in a regular browser (no parameter), no bridge requests are made.
+
 ## Installation
 
 ### Prerequisites
@@ -88,8 +92,9 @@ cargo run --release
 Open Skill Cookbook Relay from your Applications folder. The app will:
 
 - Start the MCP server on `localhost:9876`
+- Start the bridge server on `localhost:9123`
 - Show a system tray icon with a context menu (About, Show Window, Quit)
-- Display the dashboard window
+- Load the dashboard at `skills.runwaize.com` with `?tauri_version=X.Y.Z` so the web app enables bridge communication
 
 ### 2. Connect Your Account
 
