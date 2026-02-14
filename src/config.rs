@@ -178,4 +178,17 @@ impl Config {
         let config_dir = Self::config_dir()?;
         Ok(config_dir.join("skill-cookbook-relay").join("device_id"))
     }
+
+    /// Persistent directory for webview storage (localStorage, cookies).
+    /// Uses config_dir/skill-cookbook-relay/webview (same pattern as config.toml).
+    /// Used on Windows/Linux; macOS 14+ uses data_store_identifier instead.
+    #[cfg_attr(not(any(target_os = "windows", target_os = "linux")), allow(dead_code))]
+    pub fn webview_data_dir() -> Result<PathBuf> {
+        let dir = Self::config_dir()?
+            .join("skill-cookbook-relay")
+            .join("webview");
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| RelayError::Config(format!("Failed to create webview dir: {}", e)))?;
+        Ok(dir)
+    }
 }

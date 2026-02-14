@@ -41,19 +41,7 @@
         ]
       }
     },
-    "windows": [
-      {
-        "title": "Skill Cookbook Relay",
-        "width": 1200,
-        "height": 800,
-        "resizable": true,
-        "fullscreen": false,
-        "visible": true,
-        "hiddenTitle": false,
-        "decorations": true,
-        "url": "https://skills.runwaize.com"
-      }
-    ],
+    "windows": [],
     "trayIcon": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true,

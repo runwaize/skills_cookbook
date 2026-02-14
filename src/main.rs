@@ -19,8 +19,14 @@ mod variables;
 use anyhow::Result;
 use relay::RelayState;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Manager, WebviewUrl};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+/// Fixed 16-byte identifier for WKWebView data store (macOS 14+). Derived from app identifier
+/// so the same localStorage/cookies are used across app restarts.
+const WEBVIEW_DATA_STORE_ID: [u8; 16] = [
+    45, 145, 110, 134, 59, 140, 197, 89, 18, 10, 155, 53, 78, 219, 254, 84,
+];
 
 /// Tracks whether the app is using the live or local dev website.
 #[derive(Clone)]
@@ -34,7 +40,7 @@ impl WebSource {
         match std::env::var("TAURI_DEV_WEB") {
             Ok(url) if !url.is_empty() => Self {
                 label: "Local Dev".to_string(),
-                url,
+                url: url.replace("127.0.0.1", "localhost"),
             },
             _ => Self {
                 label: "Live".to_string(),
@@ -181,25 +187,41 @@ async fn main() -> Result<()> {
                 });
             }
 
-            // Navigate window to resolved web source with tauri_version param
-            let base_url = &web_source.url;
+            // Create main window with persistent webview storage and tauri_version in URL
+            let base_url = web_source.url.trim_end_matches('/');
             let initial_path = relay_state
                 .is_authenticated()
                 .then(|| "/inbox".to_string())
                 .unwrap_or_else(|| "/account/login".to_string());
             let web_url = format!(
                 "{}{}?tauri_version={}",
-                base_url.trim_end_matches('/'),
+                base_url,
                 initial_path,
                 env!("CARGO_PKG_VERSION"),
             );
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(e) = window.navigate(tauri::Url::parse(&web_url).unwrap_or_else(|_| {
-                    tauri::Url::parse("https://skills.runwaize.com").unwrap()
-                })) {
-                    tracing::warn!("Failed to navigate window: {}", e);
+            let url = tauri::Url::parse(&web_url).unwrap_or_else(|_| {
+                tauri::Url::parse("https://skills.runwaize.com").unwrap()
+            });
+
+            let mut builder = tauri::WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+                .title("Skill Cookbook Relay")
+                .inner_size(1200.0, 800.0)
+                .resizable(true)
+                .decorations(true)
+                .visible(true);
+
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                if let Ok(dir) = config::Config::webview_data_dir() {
+                    builder = builder.data_directory(dir);
                 }
             }
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder.data_store_identifier(WEBVIEW_DATA_STORE_ID);
+            }
+
+            builder.build()?;
 
             // Set up system tray with About menu
             #[cfg(desktop)]
