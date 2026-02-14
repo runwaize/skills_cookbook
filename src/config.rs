@@ -1,5 +1,6 @@
 use crate::error::{RelayError, Result};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +34,8 @@ pub struct Config {
     pub exposed_libraries: Vec<String>,
     #[serde(default = "default_skills_web_url")]
     pub skills_web_url: String,
+    #[serde(default = "default_studio_api_url")]
+    pub studio_api_url: String,
 }
 
 fn default_bridge_port() -> u16 {
@@ -41,6 +44,10 @@ fn default_bridge_port() -> u16 {
 
 fn default_skills_web_url() -> String {
     "https://skills.runwaize.com".to_string()
+}
+
+fn default_studio_api_url() -> String {
+    "https://app.supervaize.com/api/skills-studio/v1".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +91,7 @@ impl Default for Config {
             bridge_port: 9123,
             exposed_libraries: vec![],
             skills_web_url: "https://skills.runwaize.com".to_string(),
+            studio_api_url: "https://app.supervaize.com/api/skills-studio/v1".to_string(),
         }
     }
 }
@@ -128,10 +136,16 @@ impl Config {
 
     /// Get the path to the config file
     fn config_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| RelayError::Config("Cannot determine config directory".to_string()))?;
-
+        let config_dir = Self::config_dir()?;
         Ok(config_dir.join("skill-cookbook-relay").join("config.toml"))
+    }
+
+    /// Config directory: CONFIG_DIR env var (for tests) or dirs::config_dir()
+    fn config_dir() -> Result<PathBuf> {
+        env::var_os("CONFIG_DIR")
+            .map(PathBuf::from)
+            .or_else(|| dirs::config_dir())
+            .ok_or_else(|| RelayError::Config("Cannot determine config directory".to_string()))
     }
 
     /// Get the device ID for this relay instance
@@ -161,9 +175,7 @@ impl Config {
 
     /// Get the path to the device ID file
     fn device_id_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| RelayError::Config("Cannot determine config directory".to_string()))?;
-
+        let config_dir = Self::config_dir()?;
         Ok(config_dir.join("skill-cookbook-relay").join("device_id"))
     }
 }

@@ -27,6 +27,9 @@ const BRIDGE_CAPABILITIES: &[&str] = &[
     "logs_export",
     "update_status",
     "update_apply",
+    "discover_apps",
+    "discovery_scan",
+    "discovery_import",
 ];
 
 fn get_capabilities() -> Vec<String> {

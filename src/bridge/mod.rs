@@ -1,5 +1,5 @@
 mod auth;
-mod handlers;
+pub mod handlers;
 mod server;
 
 #[cfg(not(feature = "custom-protocol"))]

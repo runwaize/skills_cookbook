@@ -7,10 +7,12 @@ mod bridge;
 mod cache;
 mod config;
 mod crypto;
+mod discovery;
 mod error;
 mod mcp;
 mod relay;
 mod rss_client;
+mod studio_client;
 mod types;
 mod variables;
 

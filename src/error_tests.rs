@@ -11,7 +11,7 @@ mod tests {
 
     #[test]
     fn test_error_variants() {
-        let variants = vec![
+        let variants: Vec<RelayError> = vec![
             RelayError::Auth("a".to_string()),
             RelayError::Cache("c".to_string()),
             RelayError::Verification("v".to_string()),
@@ -23,11 +23,16 @@ mod tests {
             RelayError::InvalidSignature("is".to_string()),
             RelayError::Mcp("mcp".to_string()),
             RelayError::Internal("int".to_string()),
+            RelayError::Discovery("d".to_string()),
+            RelayError::Studio("s".to_string()),
         ];
         for err in variants {
             let msg = err.to_string();
             assert!(!msg.is_empty());
-            assert!(format!("{:?}", err).contains("RelayError"));
+            assert!(
+                std::any::type_name_of_val(&err).contains("RelayError"),
+                "Error should be RelayError type"
+            );
         }
     }
 

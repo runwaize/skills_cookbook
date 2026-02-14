@@ -3,11 +3,13 @@ pub mod auth;
 pub mod bridge;
 pub mod cache;
 pub mod config;
+pub mod discovery;
 pub mod crypto;
 pub mod error;
 pub mod mcp;
 pub mod relay;
 pub mod rss_client;
+pub mod studio_client;
 pub mod types;
 pub mod variables;
 

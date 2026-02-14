@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::config::*;
+    use serial_test::serial;
     use std::env;
     use tempfile::TempDir;
 
@@ -46,12 +47,11 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_load_save_roundtrip() {
         let temp_dir = TempDir::new().unwrap();
-        let config_dir = temp_dir.path().join("config");
-        std::fs::create_dir_all(&config_dir).unwrap();
-        env::set_var("XDG_CONFIG_HOME", temp_dir.path());
-        env::set_var("CONFIG_DIR", config_dir.to_str().unwrap());
+        let config_dir = temp_dir.path().to_path_buf();
+        env::set_var("CONFIG_DIR", config_dir.as_os_str());
 
         let config1 = Config::default();
         config1.save().unwrap();
@@ -62,31 +62,35 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_missing_file_creates_default() {
         let temp_dir = TempDir::new().unwrap();
-        let config_dir = temp_dir.path().join("config");
-        env::set_var("XDG_CONFIG_HOME", temp_dir.path());
+        let config_dir = temp_dir.path().to_path_buf();
+        env::set_var("CONFIG_DIR", config_dir.as_os_str());
         let config = Config::load().unwrap();
         assert_eq!(config.rss_api_url, "https://api.skills.cookbook/v1");
         assert!(config_dir.join("skill-cookbook-relay").join("config.toml").exists());
     }
 
     #[test]
+    #[serial]
     fn test_config_malformed_toml() {
         let temp_dir = TempDir::new().unwrap();
-        let config_dir = temp_dir.path().join("config").join("skill-cookbook-relay");
-        std::fs::create_dir_all(&config_dir).unwrap();
-        std::fs::write(config_dir.join("config.toml"), "invalid toml {").unwrap();
-        env::set_var("XDG_CONFIG_HOME", temp_dir.path());
+        let config_dir = temp_dir.path().to_path_buf();
+        let skill_relay_dir = config_dir.join("skill-cookbook-relay");
+        std::fs::create_dir_all(&skill_relay_dir).unwrap();
+        std::fs::write(skill_relay_dir.join("config.toml"), "invalid toml {").unwrap();
+        env::set_var("CONFIG_DIR", config_dir.as_os_str());
         let result = Config::load();
         assert!(result.is_err());
     }
 
     #[test]
+    #[serial]
     fn test_device_id_persistence() {
         let temp_dir = TempDir::new().unwrap();
-        let config_dir = temp_dir.path().join("config");
-        env::set_var("XDG_CONFIG_HOME", temp_dir.path());
+        let config_dir = temp_dir.path().to_path_buf();
+        env::set_var("CONFIG_DIR", config_dir.as_os_str());
         let id1 = Config::device_id().unwrap();
         assert!(!id1.is_empty());
         let id2 = Config::device_id().unwrap();

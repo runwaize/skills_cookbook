@@ -44,6 +44,12 @@ pub enum RelayError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Discovery error: {0}")]
+    Discovery(String),
+
+    #[error("Studio API error: {0}")]
+    Studio(String),
 }
 
 pub type Result<T> = std::result::Result<T, RelayError>;

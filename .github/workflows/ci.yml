@@ -102,6 +102,77 @@ jobs:
             target/release/skill-cookbook-relay${{ matrix.os == 'windows-latest' && '.exe' || '' }}
           retention-days: 7
 
+  version-bump:
+    name: Version Bump
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine bump type from commit message
+        id: bump
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -qi '\[major\]'; then
+            echo "type=major" >> $GITHUB_OUTPUT
+          elif echo "$COMMIT_MSG" | grep -qi '\[minor\]'; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Read current version
+        id: current
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Compute new version
+        id: new
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${{ steps.current.outputs.version }}"
+          BUMP="${{ steps.bump.outputs.type }}"
+          if [ "$BUMP" = "major" ]; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+          elif [ "$BUMP" = "minor" ]; then
+            MINOR=$((MINOR + 1)); PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bump: ${{ steps.current.outputs.version }} → $NEW_VERSION ($BUMP)"
+
+      - name: Update Cargo.toml
+        run: |
+          sed -i "0,/^version = \".*\"/s//version = \"${{ steps.new.outputs.version }}\"/" Cargo.toml
+
+      - name: Update tauri.conf.json
+        run: |
+          sed -i 's/"version": ".*"/"version": "${{ steps.new.outputs.version }}"/' tauri.conf.json
+
+      - name: Update CHANGELOG.md
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          NEW_VERSION="${{ steps.new.outputs.version }}"
+          # Insert a new version heading after "## [Unreleased]"
+          sed -i "/^## \[Unreleased\]/a\\\\n## [${NEW_VERSION}] - ${TODAY}" CHANGELOG.md
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml tauri.conf.json CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.new.outputs.version }}"
+          git tag "v${{ steps.new.outputs.version }}"
+          git push origin main --tags
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest

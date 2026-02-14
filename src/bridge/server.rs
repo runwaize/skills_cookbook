@@ -1,5 +1,6 @@
 use super::auth::BridgeAuth;
 use super::handlers;
+use crate::discovery;
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -62,6 +63,9 @@ pub async fn start_bridge_with_app(
         .route("/bridge/logs/export", get(handlers::logs_export))
         .route("/bridge/update/status", get(handlers::update_status))
         .route("/bridge/update/apply", post(handlers::update_apply))
+        .route("/bridge/discover-apps", post(discovery::discover_apps))
+        .route("/bridge/discovery/scan", post(discovery::discovery_scan))
+        .route("/bridge/discovery/import", post(discovery::discovery_import))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_bridge_auth_conditional,

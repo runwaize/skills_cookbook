@@ -18,7 +18,7 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls"] }
 ring = "0.17"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
@@ -52,10 +52,14 @@ toml = "0.8"
 sled = "0.34"
 bincode = "1"
 
+# Discovery (zip building)
+zip = "2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2"
 
 [dev-dependencies]
+serial_test = "3"
 tempfile = "3"
 
 [features]

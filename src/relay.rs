@@ -60,6 +60,11 @@ impl RelayState {
         Ok(state)
     }
 
+    /// Get a clone of the current config.
+    pub fn config(&self) -> Config {
+        self.config.read().clone()
+    }
+
     /// Check if user is authenticated (sync, for startup routing)
     pub fn is_authenticated(&self) -> bool {
         self.auth_manager.is_authenticated()
