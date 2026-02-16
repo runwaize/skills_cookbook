@@ -322,6 +322,8 @@ TAURI_DEV_WEB=http://localhost:5175 cargo tauri dev
 
 The `TAURI_DEV_WEB` environment variable overrides the web frontend URL. When set, the system tray About dialog will show "Local Dev" instead of "Live" to indicate the active web source.
 
+**CSRF in dev-local**: If login fails with "CSRF verification failed" in the Tauri app (but works in Chrome), the Django backend must include `"null"` in `CSRF_TRUSTED_ORIGINS`—WKWebView sends `Origin: null`. See [Documentation/troubleshooting.md](Documentation/troubleshooting.md).
+
 ### Running Tests
 
 ```bash

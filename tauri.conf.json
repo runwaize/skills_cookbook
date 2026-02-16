@@ -5,7 +5,7 @@
   "identifier": "com.supervaize.skill-cookbook-relay",
   "build": {
     "beforeDevCommand": "",
-    "devUrl": "http://localhost:5175",
+    "devUrl": "https://skills.runwaize.com",
     "beforeBuildCommand": "",
     "frontendDist": "ui"
   },

@@ -63,6 +63,8 @@ This is used by `isTauriSession()` in `desktopBridge.ts` to switch to session-to
 
 No Tauri changes required. The session token is sent in the `X-Session-Token` header. The Skills Studio backend accepts this header for authentication. CORS allows the header from the Tauri webview origin.
 
+**CSRF in dev-local**: WKWebView sends `Origin: null` for embedded webview requests. The Django backend must include `"null"` in `CSRF_TRUSTED_ORIGINS` or login will fail with "CSRF verification failed". See [troubleshooting.md](troubleshooting.md).
+
 ---
 
 ## 4. Summary
