@@ -1,8 +1,12 @@
 //! Runwaize Skills Cookbook CLI — library API for Tauri and binary.
 
+mod chef;
 mod doctor;
-mod init;
 mod guest;
+mod init;
+mod install;
+mod library;
+mod workspace;
 
 #[cfg(test)]
 mod cli_tests;
@@ -10,6 +14,7 @@ mod cli_tests;
 use clap::Parser;
 use std::process::ExitCode;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use skill_cookbook_relay::auth::AuthManager;
 
 /// Runwaize Skills Cookbook CLI — chef/guest skills, sync, install, doctor.
 #[derive(Parser, Debug)]
@@ -22,20 +27,55 @@ pub struct Cli {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Command {
-    /// Show help and subcommands.
-    Help,
-    /// Create chef and guest dirs, init chef git repo.
+    Usage,
     Init(init::InitArgs),
-    /// Diagnose config, dirs, auth, git, network.
     Doctor(doctor::DoctorArgs),
-    /// Login to Supervaize (device flow).
     Login,
-    /// Logout and clear tokens.
     Logout,
+    /// List workspaces or select one.
+    Workspace {
+        #[command(subcommand)]
+        sub: WorkspaceSub,
+    },
     /// List skills from server.
     List,
-    /// Sync chef (commit, pull, push) and guest (replace manifest).
-    Sync,
+    /// Sync chef (commit, push) and guest (replace manifest).
+    Sync(chef::SyncArgs),
+    /// Add skill at path to chef dir.
+    Add(chef::AddArgs),
+    /// Skill lifecycle (status).
+    Skill {
+        #[command(subcommand)]
+        sub: SkillSub,
+    },
+    /// Library management.
+    Library {
+        #[command(subcommand)]
+        sub: LibrarySub,
+    },
+    Install,
+    Remove,
+    Update,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum WorkspaceSub {
+    /// List workspaces or set current (stub).
+    Select(workspace::WorkspaceSelectArgs),
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum SkillSub {
+    /// Set skill status for release (API TBD).
+    Status(library::SkillStatusArgs),
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum LibrarySub {
+    Add(library::LibraryAddArgs),
+    Remove(library::LibraryRemoveArgs),
+    AddSkill(library::LibraryAddSkillArgs),
+    RemoveSkill(library::LibraryRemoveSkillArgs),
 }
 
 /// Run the CLI; returns exit code.
@@ -61,7 +101,7 @@ pub fn run() -> ExitCode {
 
 fn run_command(cli: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match &cli.command {
-        Command::Help => {
+        Command::Usage => {
             print_help();
             Ok(())
         }
@@ -69,9 +109,32 @@ fn run_command(cli: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>
         Command::Doctor(args) => doctor::run_doctor(args),
         Command::Login => run_login(),
         Command::Logout => run_logout(),
-        Command::List => run_list(),
-        Command::Sync => run_sync(),
+        Command::Workspace { sub } => match sub {
+            WorkspaceSub::Select(args) => workspace::run_workspace_select(args),
+        },
+        Command::List => chef::run_list(),
+        Command::Sync(args) => run_sync(args),
+        Command::Add(args) => chef::run_add(args),
+        Command::Skill { sub } => match sub {
+            SkillSub::Status(args) => library::run_skill_status(args),
+        },
+        Command::Library { sub } => match sub {
+            LibrarySub::Add(args) => library::run_library_add(args),
+            LibrarySub::Remove(args) => library::run_library_remove(args),
+            LibrarySub::AddSkill(args) => library::run_library_add_skill(args),
+            LibrarySub::RemoveSkill(args) => library::run_library_remove_skill(args),
+        },
+        Command::Install => install::run_install(),
+        Command::Remove => install::run_remove(),
+        Command::Update => install::run_update(),
     }
+}
+
+fn run_sync(args: &chef::SyncArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = skill_cookbook_relay::config::Config::load().map_err(|e| e.to_string())?;
+    chef::run_sync_chef(args)?;
+    guest::sync_guest_from_server(&config)?;
+    Ok(())
 }
 
 fn print_help() {
@@ -80,34 +143,48 @@ fn print_help() {
     println!("Usage: skills_cookbook <COMMAND>");
     println!();
     println!("Commands:");
-    println!("  help    Show this help");
-    println!("  init    Create chef and guest dirs, init chef git repo");
-    println!("  doctor  Diagnose config, dirs, auth, git, network");
-    println!("  login   Login to Supervaize (device flow)");
-    println!("  logout  Logout and clear tokens");
-    println!("  list    List skills from server");
-    println!("  sync    Sync chef and guest");
+    println!("  usage     Show this help");
+    println!("  init      Create chef and guest dirs, init chef git repo");
+    println!("  doctor    Diagnose config, dirs, auth, git, network");
+    println!("  login     Login to Supervaize (device flow)");
+    println!("  logout    Logout and clear tokens");
+    println!("  workspace select [id]  List or set workspace");
+    println!("  list      List skills from server");
+    println!("  sync      Sync chef and guest");
+    println!("  add <path>   Add skill to chef dir");
+    println!("  skill status <id> <status>  Set skill status (API TBD)");
+    println!("  library add|remove|add-skill|remove-skill  Manage libraries (API TBD)");
+    println!("  install   Install CLI to PATH");
+    println!("  remove    Uninstall CLI from PATH");
+    println!("  update    Self-update (stub)");
 }
 
 fn run_login() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("login: not yet implemented (use desktop app for device flow)");
-    Ok(())
+    let config = skill_cookbook_relay::config::Config::load().map_err(|e| e.to_string())?;
+    let auth = std::sync::Arc::new(
+        AuthManager::new(config).map_err(|e| e.to_string())?,
+    );
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    rt.block_on(async {
+        let dev = auth.start_device_flow().await.map_err(|e| e.to_string())?;
+        println!("Visit: {}", dev.verification_uri);
+        println!("Code: {}", dev.user_code);
+        if let Some(ref u) = dev.verification_uri_complete {
+            println!("Or open: {}", u);
+        }
+        let _ = auth
+            .poll_device_flow(dev.device_code, dev.interval)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("Logged in.");
+        Ok(())
+    })
 }
 
 fn run_logout() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("logout: not yet implemented");
-    Ok(())
-}
-
-fn run_list() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("list: not yet implemented");
-    Ok(())
-}
-
-fn run_sync() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = skill_cookbook_relay::config::Config::load()
-        .map_err(|e| e.to_string())?;
-    let manifest = guest::read_manifest(&config.guest_dir)?;
-    println!("sync: not yet implemented (guest manifest has {} skills)", manifest.skills.len());
+    let config = skill_cookbook_relay::config::Config::load().map_err(|e| e.to_string())?;
+    let auth = AuthManager::new(config).map_err(|e| e.to_string())?;
+    auth.logout().map_err(|e| e.to_string())?;
+    println!("Logged out.");
     Ok(())
 }

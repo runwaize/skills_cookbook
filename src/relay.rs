@@ -3,6 +3,7 @@ use crate::cache::ArtifactCache;
 use crate::config::Config;
 use crate::crypto;
 use crate::error::{RelayError, Result};
+use crate::guest_manifest;
 use crate::rss_client::RssClient;
 use crate::types::*;
 use crate::variables::VariableResolver;
@@ -70,6 +71,12 @@ impl RelayState {
         self.auth_manager.is_authenticated()
     }
 
+    /// Read guest manifest from config guest_dir (written by CLI). Use for curated skill list.
+    #[allow(dead_code)] // used when filtering refresh by guest list (future)
+    pub fn get_guest_manifest(&self) -> Result<guest_manifest::GuestManifest> {
+        guest_manifest::read_guest_manifest(&self.config.read().guest_dir)
+    }
+
     /// Get current relay status
     pub async fn get_status(&self) -> Result<RelayStatus> {
         let cache_stats = self.cache.stats();
@@ -86,6 +93,11 @@ impl RelayState {
             0
         };
 
+        let guest_skill_count = guest_manifest::read_guest_manifest(&self.config.read().guest_dir)
+            .ok()
+            .map(|m| m.skills.len())
+            .unwrap_or(0);
+
         Ok(RelayStatus {
             connected: authenticated,
             authenticated,
@@ -95,6 +107,7 @@ impl RelayState {
             cache_size_bytes: cache_stats.size_bytes,
             artifact_count: cache_stats.artifact_count,
             library_count,
+            guest_skill_count,
             mcp_server_running: true, // Assuming it's running
             mcp_server_port: Some(self.config.read().mcp_server_port),
         })

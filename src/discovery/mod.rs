@@ -221,7 +221,7 @@ pub fn scan_path_impl(path: &Path, client_id: &str, depth: u32) -> Result<Vec<Sc
 }
 
 /// Resolve path to SKILL.md: if path is a file, use it; if dir, look for SKILL.md inside.
-fn resolve_skill_md_path(path: &str) -> Result<PathBuf> {
+pub fn resolve_skill_md_path(path: &str) -> Result<PathBuf> {
     let p = Path::new(path);
     if p.is_file() {
         if p.file_name().map(|n| n == "SKILL.md").unwrap_or(false) {

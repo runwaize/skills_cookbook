@@ -343,6 +343,20 @@ cargo test -- --nocapture
 just test-verbose
 ```
 
+### Skills Cookbook CLI
+
+A companion CLI (`skills_cookbook`) supports chef (creator) and guest (consumer) workflows. The desktop app uses the CLI **library** for local filesystem operations; you can also run the binary standalone.
+
+```bash
+just cli              # Build release binary → target/release/skills_cookbook
+just cli-run          # Run CLI (default: usage)
+just cli-run init     # Create chef/guest dirs, init git in chef
+just cli-run doctor   # Diagnose config, dirs, auth
+just cli-test         # Run CLI tests
+```
+
+See [CLAUDE.md](CLAUDE.md) for full CLI usage.
+
 ### Debug Mode
 
 Enable debug logging:
@@ -363,6 +377,14 @@ RUST_LOG=debug cargo run
 
 ```
 skill_cookbook/
+├── cli/                     # Skills Cookbook CLI (skills_cookbook binary)
+│   ├── src/
+│   │   ├── lib.rs           # Library API for Tauri
+│   │   ├── main.rs          # CLI entrypoint
+│   │   ├── init.rs          # init command (chef/guest dirs)
+│   │   ├── doctor.rs        # doctor command
+│   │   └── guest.rs         # Guest manifest (read/write)
+│   └── Cargo.toml
 ├── src/
 │   ├── main.rs           # Tauri application entry
 │   ├── lib.rs            # Library exports

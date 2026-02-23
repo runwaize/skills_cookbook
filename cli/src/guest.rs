@@ -1,6 +1,9 @@
 //! Guest manifest: compiled curated skill list (metadata only).
 
 use serde::{Deserialize, Serialize};
+use skill_cookbook_relay::auth::AuthManager;
+use skill_cookbook_relay::rss_client::RssClient;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuestSkillEntry {
@@ -20,6 +23,7 @@ pub struct GuestManifest {
 const MANIFEST_FILENAME: &str = "manifest.json";
 
 /// Read manifest from guest dir.
+#[allow(dead_code)] // used by Tauri/relay when reading guest list
 pub fn read_manifest(
     guest_dir: &std::path::Path,
 ) -> Result<GuestManifest, Box<dyn std::error::Error + Send + Sync>> {
@@ -35,7 +39,6 @@ pub fn read_manifest(
 }
 
 /// Write manifest to guest dir.
-#[allow(dead_code)]
 pub fn write_manifest(
     guest_dir: &std::path::Path,
     manifest: &GuestManifest,
@@ -46,6 +49,43 @@ pub fn write_manifest(
         .map_err(|e| format!("serialize manifest: {}", e))?;
     std::fs::write(&path, data).map_err(|e| format!("write manifest: {}", e))?;
     Ok(())
+}
+
+/// Fetch curated skills from server (libraries + skills) and write manifest to guest dir.
+pub fn sync_guest_from_server(
+    config: &skill_cookbook_relay::config::Config,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = config.clone();
+    let guest_dir = config.guest_dir.clone();
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    rt.block_on(async {
+        let auth = Arc::new(
+            AuthManager::new(config.clone()).map_err(|e| e.to_string())?,
+        );
+        auth.initialize().await.map_err(|e| e.to_string())?;
+        if !auth.is_authenticated() {
+            println!("Not authenticated. Run login first. Guest manifest not updated.");
+            return Ok(());
+        }
+        let rss = RssClient::new(config.rss_api_url.clone(), auth);
+        let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
+        let mut skills = Vec::new();
+        for lib in &libraries {
+            let lib_skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            for s in lib_skills {
+                skills.push(GuestSkillEntry {
+                    skill_id: s.skill_id,
+                    name: s.name,
+                    description: s.description,
+                    library_id: Some(lib.library_id.clone()),
+                });
+            }
+        }
+        let manifest = GuestManifest { skills };
+        write_manifest(&guest_dir, &manifest)?;
+        println!("Guest manifest updated: {} skills", manifest.skills.len());
+        Ok(())
+    })
 }
 
 #[cfg(test)]

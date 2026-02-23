@@ -9,6 +9,7 @@ mod config;
 mod crypto;
 mod discovery;
 mod error;
+mod guest_manifest;
 mod mcp;
 mod relay;
 mod rss_client;

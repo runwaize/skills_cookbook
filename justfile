@@ -131,6 +131,25 @@ update:
 run:
     cargo run
 
+# Skills Cookbook CLI (invoked as skills_cookbook)
+# ===============================================
+# Build release CLI binary (skills_cookbook)
+cli:
+    cargo build -p runwaize_skills_cookbook_cli --release
+    @echo "Binary: target/release/skills_cookbook"
+
+# Run CLI with default command (use: just cli-run [usage|help|init|doctor|...])
+cli-run CMD="usage":
+    cargo run -p runwaize_skills_cookbook_cli -- {{CMD}}
+
+# Run CLI tests only
+cli-test:
+    cargo test -p runwaize_skills_cookbook_cli
+
+# Build CLI in debug (faster compile)
+cli-debug:
+    cargo build -p runwaize_skills_cookbook_cli
+
 # Run with specific log level
 run-debug:
     RUST_LOG=debug cargo run

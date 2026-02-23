@@ -17,6 +17,26 @@ just build-release    # Build optimized binary (cargo build --release)
 just build-app        # Build Tauri app bundle (cargo tauri build)
 ```
 
+### Skills Cookbook CLI
+
+The repo includes a companion CLI (`skills_cookbook`) for chef/guest workflows. The desktop app uses the CLI **library** for local filesystem operations; the binary can be used standalone.
+
+```bash
+just cli              # Build release CLI → target/release/skills_cookbook
+just cli-run          # Run CLI (default: usage = help)
+just cli-run init     # e.g. init, doctor, login, list, sync
+just cli-test         # Run CLI tests only
+```
+
+Or with cargo:
+
+```bash
+cargo build -p runwaize_skills_cookbook_cli --release
+./target/release/skills_cookbook usage
+./target/release/skills_cookbook init
+./target/release/skills_cookbook doctor
+```
+
 ## Testing
 
 ```bash
@@ -56,7 +76,7 @@ The app runs **two separate axum HTTP servers** concurrently (spawned as tokio t
 - **`cache.rs`** — Local artifact cache using `sled` embedded database with integrity verification.
 - **`crypto.rs`** — Artifact signature verification (RSA/ED25519) and hash checking (SHA-256).
 - **`variables.rs`** — Secret/variable resolution with scope priority: project → workspace → personal → defaults.
-- **`config.rs`** — TOML config loaded from `~/{config_dir}/skill-cookbook-relay/config.toml`. Supports `save()` for persistence.
+- **`config.rs`** — TOML config loaded from `~/{config_dir}/skill-cookbook-relay/config.toml`. Supports `save()` for persistence. Includes `chef_dir`, `guest_dir`, `workspace_id` for CLI.
 - **`types.rs`** — Shared type definitions for MCP requests/responses, artifacts, libraries, etc.
 - **`error.rs`** — `RelayError` enum (thiserror) with `Result<T>` type alias.
 
@@ -85,3 +105,4 @@ The relay types use serde aliases for RSS API field compatibility:
 - Error handling: All modules use `crate::error::{RelayError, Result}`
 - Logging: `tracing` crate with `RUST_LOG` env filter (default: `skill_cookbook_relay=info,tower_http=debug`)
 - Binary name: `skill-cookbook-relay` (crate name: `skill-cookbook-relay`)
+- **CLI**: Crate `runwaize_skills_cookbook_cli`, binary `skills_cookbook`. Lives in `cli/`. Shared config/auth with relay.

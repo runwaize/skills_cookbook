@@ -143,6 +143,7 @@ pub struct RelayStatus {
     pub cache_size_bytes: u64,
     pub artifact_count: usize,
     pub library_count: usize,
+    pub guest_skill_count: usize,
     pub mcp_server_running: bool,
     pub mcp_server_port: Option<u16>,
 }

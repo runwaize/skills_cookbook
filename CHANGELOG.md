@@ -16,6 +16,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- ✨ **CLI (runwaize_skills_cookbook_cli)**:
+  - **Workspace**: `workspace select [id]` — read/save `workspace_id` in relay config; list stub.
+  - **Chef**: `add <path>` (resolve SKILL.md, copy to chef dir, git add/commit), `sync [--no-push]` (git commit + zip upload via StudioClient), `list` (RSS libraries + skills).
+  - **Guest**: `sync` replaces local manifest with server-curated list (RSS libraries + skills → `manifest.json` in guest dir).
+  - **Library/skill**: `library add|remove|add-skill|remove-skill`, `skill status` — stubs (API TBD).
+  - **Install**: `install` (copy exe to `~/.local/bin/skills_cookbook`), `remove`, `update` (stub).
+- 🦀 **Guest manifest (relay)**: New `src/guest_manifest.rs` — `GuestManifest` / `GuestSkillEntry`, `read_guest_manifest(guest_dir)`. Relay reads the same `manifest.json` the CLI writes; no CLI dependency (avoids circular dep).
+- 🦀 **Relay status**: `RelayStatus.guest_skill_count` and `RelayState::get_guest_manifest()` for Tauri/bridge to use curated skill list; binary crate `main.rs` includes `mod guest_manifest`.
 - ✨ **Local discovery (bridge)**: New endpoints for agent discovery and local skill import.
   - `POST /bridge/discover-apps`: Detect installed skill-capable clients (Cursor, Codex, Claude Code, Codeium, Windsurf, Aider, Zed) by checking known config paths under the user directory.
   - `POST /bridge/discovery/scan`: Scan a filesystem path or client id for `SKILL.md` files; returns list of skills with path, name (from frontmatter), identifier, and client_id.

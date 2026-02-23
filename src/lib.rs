@@ -6,6 +6,7 @@ pub mod config;
 pub mod discovery;
 pub mod crypto;
 pub mod error;
+pub mod guest_manifest;
 pub mod mcp;
 pub mod relay;
 pub mod rss_client;
