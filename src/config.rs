@@ -36,6 +36,16 @@ pub struct Config {
     pub skills_web_url: String,
     #[serde(default = "default_studio_api_url")]
     pub studio_api_url: String,
+
+    /// Chef (creator) local source of truth; git repo. CLI + relay.
+    #[serde(default = "default_chef_dir")]
+    pub chef_dir: PathBuf,
+    /// Guest (consumer) local manifest dir; compiled curated list. CLI + relay.
+    #[serde(default = "default_guest_dir")]
+    pub guest_dir: PathBuf,
+    /// Selected workspace ID when user has multiple. CLI.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
 }
 
 fn default_bridge_port() -> u16 {
@@ -48,6 +58,18 @@ fn default_skills_web_url() -> String {
 
 fn default_studio_api_url() -> String {
     "https://app.supervaize.com/api/skills-studio/v1".to_string()
+}
+
+fn default_chef_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".runwaize_skills_cookbook_chef")
+}
+
+fn default_guest_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".runwaize_skills_cookbook_guest")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +114,10 @@ impl Default for Config {
             exposed_libraries: vec![],
             skills_web_url: "https://skills.runwaize.com".to_string(),
             studio_api_url: "https://app.supervaize.com/api/skills-studio/v1".to_string(),
+
+            chef_dir: default_chef_dir(),
+            guest_dir: default_guest_dir(),
+            workspace_id: None,
         }
     }
 }

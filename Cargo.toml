@@ -6,6 +6,9 @@ authors = ["SUPERVAIZE Team"]
 edition = "2021"
 rust-version = "1.70"
 
+[workspace]
+members = [".", "cli"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

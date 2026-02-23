@@ -20,6 +20,14 @@ mod tests {
     }
 
     #[test]
+    fn test_config_default_chef_guest_dirs() {
+        let config = Config::default();
+        assert!(config.chef_dir.ends_with(".runwaize_skills_cookbook_chef"));
+        assert!(config.guest_dir.ends_with(".runwaize_skills_cookbook_guest"));
+        assert_eq!(config.workspace_id, None);
+    }
+
+    #[test]
     fn test_update_mode_serialization() {
         let mode = UpdateMode::LatestApproved;
         let json = serde_json::to_string(&mode).unwrap();
