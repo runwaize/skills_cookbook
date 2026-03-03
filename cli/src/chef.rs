@@ -116,7 +116,7 @@ pub fn run_list() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     })
 }
 
-fn git_add_commit(repo_root: &Path, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub(crate) fn git_add_commit(repo_root: &Path, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _ = std::process::Command::new("git")
         .args(["add", "-A"])
         .current_dir(repo_root)

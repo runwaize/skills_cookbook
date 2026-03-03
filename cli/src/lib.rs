@@ -6,6 +6,7 @@ mod guest;
 mod init;
 mod install;
 mod library;
+mod search;
 mod workspace;
 
 #[cfg(test)]
@@ -43,6 +44,8 @@ pub enum Command {
     Sync(chef::SyncArgs),
     /// Add skill at path to chef dir.
     Add(chef::AddArgs),
+    /// Search for SKILL.md files in a directory (or detected AI agent folders) and add selected ones to chef.
+    Search(search::SearchArgs),
     /// Skill lifecycle (status).
     Skill {
         #[command(subcommand)]
@@ -115,6 +118,7 @@ fn run_command(cli: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>
         Command::List => chef::run_list(),
         Command::Sync(args) => run_sync(args),
         Command::Add(args) => chef::run_add(args),
+        Command::Search(args) => search::run_search(args),
         Command::Skill { sub } => match sub {
             SkillSub::Status(args) => library::run_skill_status(args),
         },
@@ -152,6 +156,7 @@ fn print_help() {
     println!("  list      List skills from server");
     println!("  sync      Sync chef and guest");
     println!("  add <path>   Add skill to chef dir");
+    println!("  search [path]  Scan for skills and add selected to chef");
     println!("  skill status <id> <status>  Set skill status (API TBD)");
     println!("  library add|remove|add-skill|remove-skill  Manage libraries (API TBD)");
     println!("  install   Install CLI to PATH");

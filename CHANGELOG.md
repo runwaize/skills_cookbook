@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- ✨ **CLI**: `search [path]` — recursively scan a directory (or auto-detected AI agent folders) for SKILL.md files, interactively select which to add to chef dir, and commit. Supports `--all` flag to skip the prompt.
 - ✨ **CLI (runwaize_skills_cookbook_cli)**:
   - **Workspace**: `workspace select [id]` — read/save `workspace_id` in relay config; list stub.
   - **Chef**: `add <path>` (resolve SKILL.md, copy to chef dir, git add/commit), `sync [--no-push]` (git commit + zip upload via StudioClient), `list` (RSS libraries + skills).
