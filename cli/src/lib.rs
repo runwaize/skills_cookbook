@@ -38,14 +38,12 @@ pub enum Command {
         #[command(subcommand)]
         sub: WorkspaceSub,
     },
-    /// List skills from server.
-    List,
-    /// Sync chef (commit, push) and guest (replace manifest).
-    Sync(chef::SyncArgs),
-    /// Add skill at path to chef dir.
-    Add(chef::AddArgs),
-    /// Search for SKILL.md files in a directory (or detected AI agent folders) and add selected ones to chef.
-    Search(search::SearchArgs),
+    /// Chef skill management (list, edit, add, sync, search).
+    #[command(visible_alias = "cook")]
+    Chef {
+        #[command(subcommand)]
+        sub: ChefSub,
+    },
     /// Skill lifecycle (status).
     Skill {
         #[command(subcommand)]
@@ -59,6 +57,20 @@ pub enum Command {
     Install,
     Remove,
     Update,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum ChefSub {
+    /// List local skills in chef dir. Use --remote to fetch from server.
+    List(chef::ListArgs),
+    /// Open a skill's SKILL.md in your editor.
+    Edit(chef::EditArgs),
+    /// Add skill at path to chef dir.
+    Add(chef::AddArgs),
+    /// Sync chef (commit, push) and guest (replace manifest).
+    Sync(chef::SyncArgs),
+    /// Search for SKILL.md files and add selected ones to chef.
+    Search(search::SearchArgs),
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -115,10 +127,13 @@ fn run_command(cli: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>
         Command::Workspace { sub } => match sub {
             WorkspaceSub::Select(args) => workspace::run_workspace_select(args),
         },
-        Command::List => chef::run_list(),
-        Command::Sync(args) => run_sync(args),
-        Command::Add(args) => chef::run_add(args),
-        Command::Search(args) => search::run_search(args),
+        Command::Chef { sub } => match sub {
+            ChefSub::List(args) => chef::run_list_local(args),
+            ChefSub::Edit(args) => chef::run_edit(args),
+            ChefSub::Add(args) => chef::run_add(args),
+            ChefSub::Sync(args) => run_sync(args),
+            ChefSub::Search(args) => search::run_search(args),
+        },
         Command::Skill { sub } => match sub {
             SkillSub::Status(args) => library::run_skill_status(args),
         },
@@ -153,10 +168,14 @@ fn print_help() {
     println!("  login     Login to Supervaize (device flow)");
     println!("  logout    Logout and clear tokens");
     println!("  workspace select [id]  List or set workspace");
-    println!("  list      List skills from server");
-    println!("  sync      Sync chef and guest");
-    println!("  add <path>   Add skill to chef dir");
-    println!("  search [path]  Scan for skills and add selected to chef");
+    println!();
+    println!("  chef (cook)  Chef skill management:");
+    println!("    chef list [--remote]   List local skills (or server skills with --remote)");
+    println!("    chef edit [name]       Open SKILL.md in editor (interactive picker if no name)");
+    println!("    chef add <path>        Add skill to chef dir");
+    println!("    chef sync [--no-push]  Sync chef and guest");
+    println!("    chef search [path]     Scan for skills and add selected to chef");
+    println!();
     println!("  skill status <id> <status>  Set skill status (API TBD)");
     println!("  library add|remove|add-skill|remove-skill  Manage libraries (API TBD)");
     println!("  install   Install CLI to PATH");

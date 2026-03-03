@@ -40,6 +40,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- ✨ **CLI**: Grouped `list`, `add`, `sync`, `search` under `chef` subcommand (`cook` alias). Added `chef list` (local skills, `--remote` for server) and `chef edit [name]` (interactive SKILL.md editor).
 - 🦀 **Web source resolution**: Extracted URL resolution into a `WebSource` struct, centralizing the live-vs-local-dev decision early in startup instead of resolving it inline in multiple places.
 - 🏗️ **Justfile cleanup**: Removed duplicate `start-dev` recipe; clarified `dev` recipe description.
 
