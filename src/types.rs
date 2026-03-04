@@ -258,6 +258,66 @@ pub enum UpdateType {
     MetadataChanged,
 }
 
+// ===== Local UI Types =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalSkill {
+    pub name: String,
+    pub has_skill_md: bool,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSkillInfo {
+    pub library_name: String,
+    pub library_id: String,
+    pub skill_name: String,
+    pub skill_id: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncResult {
+    pub committed: bool,
+    pub pushed: bool,
+    pub skills_pushed: usize,
+    pub guest_skills_updated: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiagnosticCheck {
+    pub name: String,
+    pub status: DiagnosticStatus,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticStatus {
+    Ok,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScannedSkillInfo {
+    pub name: String,
+    pub path: String,
+    pub already_in_chef: bool,
+    pub source_agent: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub user_role: crate::config::UserRole,
+    pub ui_mode: crate::config::UiMode,
+    pub chef_dir: String,
+    pub guest_dir: String,
+    pub workspace_id: Option<String>,
+    pub mcp_server_port: u16,
+    pub bridge_port: u16,
+}
+
 // ===== Token Types =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

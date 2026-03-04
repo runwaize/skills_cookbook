@@ -10,6 +10,87 @@ pub struct DoctorArgs {
     pub offline: bool,
 }
 
+/// Run doctor and return structured diagnostics (for Tauri UI).
+pub fn run_doctor_structured() -> Result<Vec<skill_cookbook_relay::types::DiagnosticCheck>, Box<dyn std::error::Error + Send + Sync>> {
+    use skill_cookbook_relay::types::{DiagnosticCheck, DiagnosticStatus};
+    let mut checks = Vec::new();
+
+    match Config::load() {
+        Ok(config) => {
+            checks.push(DiagnosticCheck {
+                name: "Config".into(),
+                status: DiagnosticStatus::Ok,
+                message: format!("Loaded from {}", config.chef_dir.display()),
+            });
+
+            // Chef dir
+            if config.chef_dir.exists() && config.chef_dir.is_dir() {
+                checks.push(DiagnosticCheck {
+                    name: "Chef directory".into(),
+                    status: DiagnosticStatus::Ok,
+                    message: config.chef_dir.to_string_lossy().into(),
+                });
+            } else {
+                checks.push(DiagnosticCheck {
+                    name: "Chef directory".into(),
+                    status: DiagnosticStatus::Error,
+                    message: format!("Missing: {}", config.chef_dir.display()),
+                });
+            }
+
+            // Guest dir
+            if config.guest_dir.exists() {
+                checks.push(DiagnosticCheck {
+                    name: "Guest directory".into(),
+                    status: DiagnosticStatus::Ok,
+                    message: config.guest_dir.to_string_lossy().into(),
+                });
+            } else {
+                checks.push(DiagnosticCheck {
+                    name: "Guest directory".into(),
+                    status: DiagnosticStatus::Warning,
+                    message: format!("Missing: {}", config.guest_dir.display()),
+                });
+            }
+
+            // Git repo
+            if config.chef_dir.join(".git").exists() {
+                checks.push(DiagnosticCheck {
+                    name: "Chef git repo".into(),
+                    status: DiagnosticStatus::Ok,
+                    message: "Initialized".into(),
+                });
+            } else {
+                checks.push(DiagnosticCheck {
+                    name: "Chef git repo".into(),
+                    status: DiagnosticStatus::Error,
+                    message: "Not a git repo (run init)".into(),
+                });
+            }
+
+            // Workspace
+            checks.push(DiagnosticCheck {
+                name: "Workspace ID".into(),
+                status: if config.workspace_id.is_some() {
+                    DiagnosticStatus::Ok
+                } else {
+                    DiagnosticStatus::Warning
+                },
+                message: config.workspace_id.as_deref().unwrap_or("Not set").into(),
+            });
+        }
+        Err(e) => {
+            checks.push(DiagnosticCheck {
+                name: "Config".into(),
+                status: DiagnosticStatus::Error,
+                message: format!("Failed to load: {}", e),
+            });
+        }
+    }
+
+    Ok(checks)
+}
+
 pub fn run_doctor(args: &DoctorArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut ok = true;
 

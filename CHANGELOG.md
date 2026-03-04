@@ -16,6 +16,38 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- 🧑‍🎨 **Local React UI**: New `local-ui/` React 19 + Vite 6 + Tailwind 4 + DaisyUI 5 application as the default Tauri frontend, replacing the remote `skills.runwaize.com` webview.
+  - **Role-based navigation**: Users choose Chef (creator) or Cook (consumer) at first launch; role persists in config and determines which sidebar items and pages are shown.
+  - **Chef pages**: Dashboard (quick stats + action cards), My Skills (list/edit/open local SKILL.md files), Remote Skills (server libraries grouped by library), Skill Editor (inline SKILL.md editor with save), Discover (detect AI agents, scan for skills, checkbox import), Sync (git commit + push).
+  - **Cook pages**: Dashboard (manifest overview + auth status), Available Skills (browse guest manifest), Sync (fetch latest manifest from server).
+  - **Shared pages**: Relay Status (MCP port, cache, auth, library count), Doctor (diagnostic checks with OK/Warning/Error), Settings (role switch, UI mode, directory paths, ports).
+  - **Design system**: Full Runwaize brand palette copied from Skills Studio (green #41e33b primary, dark theme, Outfit font, shadcn/ui new-york style).
+  - **13 shadcn/ui components**: button, badge, card, dialog, input, label, separator, sheet, sidebar, skeleton, tabs, textarea, tooltip — copied from studio frontend.
+- 🛣️ **Config**: `user_role` (chef/cook) and `ui_mode` (local/online) fields on `Config`, persisted in `config.toml`. Defaults: `cook` role, `local` UI mode.
+- 🦀 **New types**: `LocalSkill`, `RemoteSkillInfo`, `SyncResult`, `DiagnosticCheck`, `DiagnosticStatus`, `ScannedSkillInfo`, `AppConfig` in `src/types.rs` for frontend communication.
+- ✨ **16 new Tauri commands**: `get_config`, `set_user_role`, `switch_ui_mode`, `list_local_skills`, `list_remote_skills`, `add_skill`, `read_skill_content`, `write_skill_content`, `open_skill_in_editor`, `sync_chef`, `discover_agents`, `scan_for_skills`, `import_skills`, `get_guest_manifest`, `sync_guest`, `run_doctor`, `init_cookbook`.
+- 🧑‍🎨 **Tray menu**: Chef Mode / Cook Mode items (switch role, emit event to frontend), Local UI / Online UI items (navigate webview), separators between groups.
+- ✨ **CLI structured APIs**: New public functions for Tauri consumption — `list_local_skills_structured()`, `list_remote_skills_structured()`, `add_skill_to_chef()`, `sync_chef_structured()`, `run_doctor_structured()`, `sync_guest_count()`, `scan_for_skills_structured()`, `import_skills_to_chef()`.
+- 🦀 **Guest manifest write**: `write_guest_manifest()` in `src/guest_manifest.rs` for the `sync_guest` Tauri command.
+- 🏗️ **Build integration**: `just ui-install`, `just ui-dev`, `just ui-build` recipes. Tauri config updated with `beforeDevCommand`, `devUrl`, `beforeBuildCommand`, `frontendDist` for local-ui.
+- 🔒 **CSP update**: Extended Content Security Policy for local UI (`tauri:`, `ipc:`, fonts, `data:`, `blob:`).
+
+### Changed
+
+- 🧑‍🎨 **Default UI mode**: App now starts with the local React UI by default instead of loading `skills.runwaize.com`. Users can switch to online mode via tray menu, header button, or settings page.
+- 🛣️ **Window title**: Changed from "Skill Cookbook Relay" to "Skill Cookbook".
+- 🏗️ **tauri.conf.json**: `frontendDist` changed from `ui` to `local-ui/dist`; added `beforeDevCommand` and `beforeBuildCommand` for Vite.
+- ✨ **CLI modules**: `chef`, `doctor`, `guest`, `init`, `search` modules made `pub` for library API access.
+
+### Tests
+
+| Status                  | Count | ⏲️     |
+| ----------------------- | ----- | ------ |
+| ✅ Passed CLI tests     | 38    | 0.06s  |
+| ✅ Passed relay tests   | 12    | 0.09s  |
+
+---
+
 - ✨ **CLI**: `search [path]` — recursively scan a directory (or auto-detected AI agent folders) for SKILL.md files, interactively select which to add to chef dir, and commit. Supports `--all` flag to skip the prompt.
 - ✨ **CLI (runwaize_skills_cookbook_cli)**:
   - **Workspace**: `workspace select [id]` — read/save `workspace_id` in relay config; list stub.

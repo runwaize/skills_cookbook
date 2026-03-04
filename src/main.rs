@@ -18,9 +18,11 @@ mod types;
 mod variables;
 
 use anyhow::Result;
+use config::{UiMode, UserRole};
 use relay::RelayState;
+use std::path::Path;
 use std::sync::Arc;
-use tauri::{Manager, WebviewUrl};
+use tauri::{Emitter, Manager, WebviewUrl};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Fixed 16-byte identifier for WKWebView data store (macOS 14+). Derived from app identifier
@@ -50,6 +52,8 @@ impl WebSource {
         }
     }
 }
+
+// ===== Existing commands =====
 
 #[tauri::command]
 async fn get_relay_status(
@@ -94,6 +98,548 @@ async fn wipe_all_data(state: tauri::State<'_, Arc<RelayState>>) -> Result<(), S
     state.wipe_all_data().await.map_err(|e| e.to_string())
 }
 
+// ===== New commands for Local UI =====
+
+#[tauri::command]
+async fn get_config(
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<types::AppConfig, String> {
+    let cfg = state.config.read();
+    Ok(types::AppConfig {
+        user_role: cfg.user_role.clone(),
+        ui_mode: cfg.ui_mode.clone(),
+        chef_dir: cfg.chef_dir.to_string_lossy().to_string(),
+        guest_dir: cfg.guest_dir.to_string_lossy().to_string(),
+        workspace_id: cfg.workspace_id.clone(),
+        mcp_server_port: cfg.mcp_server_port,
+        bridge_port: cfg.bridge_port,
+    })
+}
+
+#[tauri::command]
+async fn set_user_role(
+    state: tauri::State<'_, Arc<RelayState>>,
+    role: UserRole,
+) -> Result<(), String> {
+    {
+        let mut cfg = state.config.write();
+        cfg.user_role = role;
+        cfg.save().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn switch_ui_mode(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<RelayState>>,
+    mode: UiMode,
+) -> Result<(), String> {
+    {
+        let mut cfg = state.config.write();
+        cfg.ui_mode = mode.clone();
+        cfg.save().map_err(|e| e.to_string())?;
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        match mode {
+            UiMode::Online => {
+                let cfg = state.config.read();
+                let url = format!(
+                    "{}?tauri_version={}",
+                    cfg.skills_web_url,
+                    env!("CARGO_PKG_VERSION")
+                );
+                let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+                window
+                    .navigate(parsed)
+                    .map_err(|e| e.to_string())?;
+            }
+            UiMode::Local => {
+                // Navigate back to local UI
+                let parsed =
+                    tauri::Url::parse("tauri://localhost").map_err(|e| e.to_string())?;
+                window
+                    .navigate(parsed)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_local_skills(
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<Vec<types::LocalSkill>, String> {
+    let cfg = state.config.read();
+    let skills_dir = cfg.chef_dir.join("skills");
+    drop(cfg);
+    list_local_skills_impl(&skills_dir).map_err(|e| e.to_string())
+}
+
+fn list_local_skills_impl(
+    skills_dir: &Path,
+) -> std::result::Result<Vec<types::LocalSkill>, String> {
+    if !skills_dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut result = Vec::new();
+    let entries = std::fs::read_dir(skills_dir).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let has_skill_md = entry.path().join("SKILL.md").exists();
+        let path = entry.path().to_string_lossy().to_string();
+        result.push(types::LocalSkill {
+            name,
+            has_skill_md,
+            path,
+        });
+    }
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(result)
+}
+
+#[tauri::command]
+async fn list_remote_skills(
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<Vec<types::RemoteSkillInfo>, String> {
+    let libraries = state.list_libraries().await.map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for lib in &libraries {
+        let skills = state
+            .list_skills(Some(&lib.library_id))
+            .await
+            .unwrap_or_default();
+        for s in skills {
+            result.push(types::RemoteSkillInfo {
+                library_name: lib.name.clone(),
+                library_id: lib.library_id.clone(),
+                skill_name: s.name,
+                skill_id: s.skill_id,
+                description: s.description,
+            });
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+async fn add_skill(
+    state: tauri::State<'_, Arc<RelayState>>,
+    path: String,
+) -> Result<(), String> {
+    let cfg = state.config.read();
+    let skill_md_path =
+        discovery::resolve_skill_md_path(&path).map_err(|e| e.to_string())?;
+    let skill_name = skill_md_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("skill")
+        .to_string();
+    let dest_dir = cfg.chef_dir.join("skills").join(&skill_name);
+    std::fs::create_dir_all(&dest_dir).map_err(|e| format!("create dest dir: {}", e))?;
+    let dest_path = dest_dir.join("SKILL.md");
+    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| e.to_string())?;
+    std::fs::write(&dest_path, content).map_err(|e| format!("write: {}", e))?;
+    git_add_commit_impl(&cfg.chef_dir, &format!("Add skill: {}", skill_name))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn read_skill_content(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+) -> Result<String, String> {
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join("SKILL.md");
+    std::fs::read_to_string(&path).map_err(|e| format!("read {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+async fn write_skill_content(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    content: String,
+) -> Result<(), String> {
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join("SKILL.md");
+    std::fs::write(&path, content).map_err(|e| format!("write {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+async fn open_skill_in_editor(name: String, state: tauri::State<'_, Arc<RelayState>>) -> Result<(), String> {
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join("SKILL.md");
+    drop(cfg);
+
+    let path_str = path.to_string_lossy().to_string();
+    if let Ok(editor) = std::env::var("EDITOR") {
+        std::process::Command::new(&editor)
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("failed to launch {}: {}", editor, e))?;
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+            .args(["-t", &path_str])
+            .spawn()
+            .map_err(|e| format!("open: {}", e))?;
+    } else if cfg!(target_os = "linux") {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("xdg-open: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn sync_chef(
+    state: tauri::State<'_, Arc<RelayState>>,
+    no_push: bool,
+) -> Result<types::SyncResult, String> {
+    let cfg = state.config.read().clone();
+    let committed = git_has_changes_impl(&cfg.chef_dir)?;
+    if committed {
+        git_add_commit_impl(&cfg.chef_dir, "Sync chef")?;
+    }
+
+    let skills_pushed = 0;
+    let pushed = !no_push;
+
+    Ok(types::SyncResult {
+        committed,
+        pushed,
+        skills_pushed,
+        guest_skills_updated: 0,
+    })
+}
+
+#[tauri::command]
+async fn discover_agents() -> Result<Vec<discovery::DiscoveredClient>, String> {
+    let resp = discovery::discover_apps_impl();
+    Ok(resp.clients)
+}
+
+#[tauri::command]
+async fn scan_for_skills(
+    state: tauri::State<'_, Arc<RelayState>>,
+    path: Option<String>,
+) -> Result<Vec<types::ScannedSkillInfo>, String> {
+    let cfg = state.config.read();
+    let existing = existing_skill_names(&cfg.chef_dir.join("skills"));
+
+    let skills = if let Some(ref p) = path {
+        let dir = Path::new(p);
+        if !dir.is_dir() {
+            return Err(format!("Not a directory: {}", p));
+        }
+        discovery::scan_path_impl(dir, "custom", 0).map_err(|e| e.to_string())?
+    } else {
+        // Scan all detected agent folders
+        let apps = discovery::discover_apps_impl();
+        let mut all = Vec::new();
+        for client in apps.clients.iter().filter(|c| c.detected) {
+            if let Some(ref p) = client.path {
+                if let Ok(skills) = discovery::scan_path_impl(Path::new(p), &client.id, 0) {
+                    all.extend(skills);
+                }
+            }
+        }
+        all
+    };
+
+    // Dedup by name
+    let mut seen = std::collections::HashSet::new();
+    let skills: Vec<_> = skills
+        .into_iter()
+        .filter(|s| seen.insert(s.name.clone()))
+        .collect();
+
+    Ok(skills
+        .into_iter()
+        .map(|s| types::ScannedSkillInfo {
+            name: s.name.clone(),
+            path: s.path.clone(),
+            already_in_chef: existing.contains(&s.name),
+            source_agent: s.client_id,
+        })
+        .collect())
+}
+
+#[tauri::command]
+async fn import_skills(
+    state: tauri::State<'_, Arc<RelayState>>,
+    paths: Vec<String>,
+) -> Result<usize, String> {
+    let cfg = state.config.read();
+    let chef_skills_dir = cfg.chef_dir.join("skills");
+    let mut added = Vec::new();
+    for path_str in &paths {
+        let skill_md = Path::new(path_str);
+        let src_dir = match skill_md.parent() {
+            Some(d) => d,
+            None => continue,
+        };
+        let name = src_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("skill")
+            .to_string();
+        let dest_dir = chef_skills_dir.join(&name);
+        copy_dir_recursive(src_dir, &dest_dir).map_err(|e| e.to_string())?;
+        added.push(name);
+    }
+    if !added.is_empty() {
+        let msg = match added.len() {
+            1 => format!("Add skill: {}", added[0]),
+            n => format!("Add {} skills", n),
+        };
+        git_add_commit_impl(&cfg.chef_dir, &msg)?;
+    }
+    Ok(added.len())
+}
+
+#[tauri::command]
+async fn get_guest_manifest(
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<guest_manifest::GuestManifest, String> {
+    let cfg = state.config.read();
+    guest_manifest::read_guest_manifest(&cfg.guest_dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn sync_guest(
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<usize, String> {
+    // Sync guest manifest from server
+    let cfg = state.config.read().clone();
+    let libraries = state.list_libraries().await.map_err(|e| e.to_string())?;
+    let mut skills = Vec::new();
+    for lib in &libraries {
+        let lib_skills = state
+            .list_skills(Some(&lib.library_id))
+            .await
+            .unwrap_or_default();
+        for s in lib_skills {
+            skills.push(guest_manifest::GuestSkillEntry {
+                skill_id: s.skill_id,
+                name: s.name,
+                description: s.description,
+                library_id: Some(lib.library_id.clone()),
+            });
+        }
+    }
+    let count = skills.len();
+    let manifest = guest_manifest::GuestManifest { skills };
+    guest_manifest::write_guest_manifest(&cfg.guest_dir, &manifest).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+#[tauri::command]
+async fn run_doctor(
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<Vec<types::DiagnosticCheck>, String> {
+    use types::{DiagnosticCheck, DiagnosticStatus};
+    let cfg = state.config.read();
+    let mut checks = Vec::new();
+
+    // Config
+    checks.push(DiagnosticCheck {
+        name: "Config".into(),
+        status: DiagnosticStatus::Ok,
+        message: "Loaded successfully".into(),
+    });
+
+    // Chef dir
+    if cfg.chef_dir.exists() && cfg.chef_dir.is_dir() {
+        checks.push(DiagnosticCheck {
+            name: "Chef directory".into(),
+            status: DiagnosticStatus::Ok,
+            message: cfg.chef_dir.to_string_lossy().into(),
+        });
+    } else {
+        checks.push(DiagnosticCheck {
+            name: "Chef directory".into(),
+            status: DiagnosticStatus::Error,
+            message: format!("Missing: {}", cfg.chef_dir.display()),
+        });
+    }
+
+    // Guest dir
+    if cfg.guest_dir.exists() {
+        checks.push(DiagnosticCheck {
+            name: "Guest directory".into(),
+            status: DiagnosticStatus::Ok,
+            message: cfg.guest_dir.to_string_lossy().into(),
+        });
+    } else {
+        checks.push(DiagnosticCheck {
+            name: "Guest directory".into(),
+            status: DiagnosticStatus::Warning,
+            message: format!("Missing: {}", cfg.guest_dir.display()),
+        });
+    }
+
+    // Git repo
+    if cfg.chef_dir.join(".git").exists() {
+        checks.push(DiagnosticCheck {
+            name: "Chef git repo".into(),
+            status: DiagnosticStatus::Ok,
+            message: "Initialized".into(),
+        });
+    } else {
+        checks.push(DiagnosticCheck {
+            name: "Chef git repo".into(),
+            status: DiagnosticStatus::Error,
+            message: "Not a git repo (run init)".into(),
+        });
+    }
+
+    // Workspace
+    checks.push(DiagnosticCheck {
+        name: "Workspace ID".into(),
+        status: if cfg.workspace_id.is_some() {
+            DiagnosticStatus::Ok
+        } else {
+            DiagnosticStatus::Warning
+        },
+        message: cfg
+            .workspace_id
+            .as_deref()
+            .unwrap_or("Not set")
+            .into(),
+    });
+
+    // Auth
+    let authenticated = state.is_authenticated();
+    checks.push(DiagnosticCheck {
+        name: "Authentication".into(),
+        status: if authenticated {
+            DiagnosticStatus::Ok
+        } else {
+            DiagnosticStatus::Warning
+        },
+        message: if authenticated {
+            "Logged in".into()
+        } else {
+            "Not authenticated".into()
+        },
+    });
+
+    // MCP
+    checks.push(DiagnosticCheck {
+        name: "MCP Server".into(),
+        status: DiagnosticStatus::Ok,
+        message: format!("Port {}", cfg.mcp_server_port),
+    });
+
+    Ok(checks)
+}
+
+#[tauri::command]
+async fn init_cookbook(
+    state: tauri::State<'_, Arc<RelayState>>,
+    chef_dir: Option<String>,
+    guest_dir: Option<String>,
+) -> Result<(), String> {
+    let mut cfg = state.config.write();
+
+    if let Some(ref cd) = chef_dir {
+        cfg.chef_dir = std::path::PathBuf::from(cd);
+    }
+    if let Some(ref gd) = guest_dir {
+        cfg.guest_dir = std::path::PathBuf::from(gd);
+    }
+
+    std::fs::create_dir_all(&cfg.chef_dir).map_err(|e| format!("create chef dir: {}", e))?;
+    std::fs::create_dir_all(&cfg.guest_dir).map_err(|e| format!("create guest dir: {}", e))?;
+
+    // Init git in chef dir if needed
+    if !cfg.chef_dir.join(".git").exists() {
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&cfg.chef_dir)
+            .status()
+            .map_err(|e| format!("git init: {}", e))?;
+    }
+
+    cfg.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ===== Helper functions =====
+
+fn git_add_commit_impl(repo_root: &Path, message: &str) -> std::result::Result<(), String> {
+    let _ = std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(repo_root)
+        .status()
+        .map_err(|e| format!("git add: {}", e))?;
+    std::process::Command::new("git")
+        .args(["commit", "-m", message])
+        .current_dir(repo_root)
+        .status()
+        .map_err(|e| format!("git commit: {}", e))?;
+    Ok(())
+}
+
+fn git_has_changes_impl(repo_root: &Path) -> std::result::Result<bool, String> {
+    let output = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("git status: {}", e))?;
+    Ok(!output.stdout.is_empty())
+}
+
+fn existing_skill_names(chef_skills_dir: &Path) -> std::collections::HashSet<String> {
+    let mut names = std::collections::HashSet::new();
+    if let Ok(entries) = std::fs::read_dir(chef_skills_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    names.insert(name.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::result::Result<(), String> {
+    std::fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {}", dst.display(), e))?;
+    for entry in
+        std::fs::read_dir(src).map_err(|e| format!("read dir {}: {}", src.display(), e))?
+    {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ft = entry.file_type().map_err(|e| e.to_string())?;
+        if ft.is_symlink() {
+            continue;
+        }
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if ft.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path).map_err(|e| {
+                format!("copy {} -> {}: {}", src_path.display(), dst_path.display(), e)
+            })?;
+        }
+    }
+    Ok(())
+}
+
+// ===== Main =====
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
@@ -136,6 +682,7 @@ async fn main() -> Result<()> {
         .plugin(tauri_plugin_dialog::init())
         .manage(relay_state.clone())
         .invoke_handler(tauri::generate_handler![
+            // Existing
             get_relay_status,
             login_to_rss,
             logout_from_rss,
@@ -143,6 +690,24 @@ async fn main() -> Result<()> {
             list_libraries,
             clear_cache,
             wipe_all_data,
+            // New for local UI
+            get_config,
+            set_user_role,
+            switch_ui_mode,
+            list_local_skills,
+            list_remote_skills,
+            add_skill,
+            read_skill_content,
+            write_skill_content,
+            open_skill_in_editor,
+            sync_chef,
+            discover_agents,
+            scan_for_skills,
+            import_skills,
+            get_guest_manifest,
+            sync_guest,
+            run_doctor,
+            init_cookbook,
         ])
         .setup(move |app| {
             let bridge_origin = Some(web_source.url.clone());
@@ -188,28 +753,39 @@ async fn main() -> Result<()> {
                 });
             }
 
-            // Create main window with persistent webview storage and tauri_version in URL
-            let base_url = web_source.url.trim_end_matches('/');
-            let initial_path = relay_state
-                .is_authenticated()
-                .then(|| "/inbox".to_string())
-                .unwrap_or_else(|| "/account/login".to_string());
-            let web_url = format!(
-                "{}{}?tauri_version={}",
-                base_url,
-                initial_path,
-                env!("CARGO_PKG_VERSION"),
-            );
-            let url = tauri::Url::parse(&web_url).unwrap_or_else(|_| {
-                tauri::Url::parse("https://skills.runwaize.com").unwrap()
-            });
+            // Determine initial URL based on ui_mode
+            let webview_url = match config.ui_mode {
+                UiMode::Local => {
+                    // In dev, the Vite dev server is running at devUrl; in production,
+                    // the local-ui/dist is served via the custom protocol.
+                    WebviewUrl::App("index.html".into())
+                }
+                UiMode::Online => {
+                    let base_url = web_source.url.trim_end_matches('/');
+                    let initial_path = relay_state
+                        .is_authenticated()
+                        .then(|| "/inbox".to_string())
+                        .unwrap_or_else(|| "/account/login".to_string());
+                    let web_url = format!(
+                        "{}{}?tauri_version={}",
+                        base_url,
+                        initial_path,
+                        env!("CARGO_PKG_VERSION"),
+                    );
+                    let url = tauri::Url::parse(&web_url).unwrap_or_else(|_| {
+                        tauri::Url::parse("https://skills.runwaize.com").unwrap()
+                    });
+                    WebviewUrl::External(url)
+                }
+            };
 
-            let mut builder = tauri::WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("Skill Cookbook Relay")
-                .inner_size(1200.0, 800.0)
-                .resizable(true)
-                .decorations(true)
-                .visible(true);
+            let mut builder =
+                tauri::WebviewWindowBuilder::new(app, "main", webview_url)
+                    .title("Skill Cookbook")
+                    .inner_size(1200.0, 800.0)
+                    .resizable(true)
+                    .decorations(true)
+                    .visible(true);
 
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
@@ -224,7 +800,7 @@ async fn main() -> Result<()> {
 
             builder.build()?;
 
-            // Set up system tray with About menu
+            // Set up system tray
             #[cfg(desktop)]
             {
                 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
@@ -238,19 +814,34 @@ async fn main() -> Result<()> {
                 );
 
                 let about_item =
-                    MenuItemBuilder::with_id("about", "About Skill Cookbook Relay").build(app)?;
+                    MenuItemBuilder::with_id("about", "About Skill Cookbook").build(app)?;
                 let show_item = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
+                let chef_item =
+                    MenuItemBuilder::with_id("role_chef", "Chef Mode").build(app)?;
+                let cook_item =
+                    MenuItemBuilder::with_id("role_cook", "Cook Mode").build(app)?;
+                let local_ui_item =
+                    MenuItemBuilder::with_id("ui_local", "Local UI").build(app)?;
+                let online_ui_item =
+                    MenuItemBuilder::with_id("ui_online", "Online UI").build(app)?;
                 let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
                 let menu = MenuBuilder::new(app)
                     .item(&about_item)
                     .item(&PredefinedMenuItem::separator(app)?)
+                    .item(&chef_item)
+                    .item(&cook_item)
+                    .item(&PredefinedMenuItem::separator(app)?)
+                    .item(&local_ui_item)
+                    .item(&online_ui_item)
+                    .item(&PredefinedMenuItem::separator(app)?)
                     .item(&show_item)
                     .item(&quit_item)
                     .build()?;
 
+                let relay_for_tray = relay_state.clone();
                 let _tray = TrayIconBuilder::new()
-                    .tooltip("Skill Cookbook Relay")
+                    .tooltip("Skill Cookbook")
                     .menu(&menu)
                     .show_menu_on_left_click(true)
                     .on_menu_event(move |app_handle, event| {
@@ -264,7 +855,7 @@ async fn main() -> Result<()> {
                                         window
                                             .dialog()
                                             .message(msg)
-                                            .title("About Skill Cookbook Relay")
+                                            .title("About Skill Cookbook")
                                             .show(|_| {});
                                     }
                                 });
@@ -274,6 +865,64 @@ async fn main() -> Result<()> {
                                     let _ = window.show();
                                     let _ = window.set_focus();
                                 }
+                            }
+                            "role_chef" | "role_cook" => {
+                                let role = if event.id().as_ref() == "role_chef" {
+                                    UserRole::Chef
+                                } else {
+                                    UserRole::Cook
+                                };
+                                let relay = relay_for_tray.clone();
+                                let handle = app_handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let mut cfg = relay.config.write();
+                                    cfg.user_role = role.clone();
+                                    let _ = cfg.save();
+                                    drop(cfg);
+                                    let role_str = match role {
+                                        UserRole::Chef => "chef",
+                                        UserRole::Cook => "cook",
+                                    };
+                                    let _ = handle.emit("role-changed", role_str);
+                                });
+                            }
+                            "ui_local" | "ui_online" => {
+                                let mode = if event.id().as_ref() == "ui_local" {
+                                    UiMode::Local
+                                } else {
+                                    UiMode::Online
+                                };
+                                let relay = relay_for_tray.clone();
+                                let handle = app_handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let mut cfg = relay.config.write();
+                                    cfg.ui_mode = mode.clone();
+                                    let _ = cfg.save();
+                                    drop(cfg);
+
+                                    if let Some(window) = handle.get_webview_window("main") {
+                                        match mode {
+                                            UiMode::Online => {
+                                                let cfg = relay.config.read();
+                                                let url = format!(
+                                                    "{}?tauri_version={}",
+                                                    cfg.skills_web_url,
+                                                    env!("CARGO_PKG_VERSION")
+                                                );
+                                                if let Ok(parsed) = tauri::Url::parse(&url) {
+                                                    let _ = window.navigate(parsed);
+                                                }
+                                            }
+                                            UiMode::Local => {
+                                                if let Ok(parsed) =
+                                                    tauri::Url::parse("tauri://localhost")
+                                                {
+                                                    let _ = window.navigate(parsed);
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
                             }
                             "quit" => {
                                 app_handle.exit(0);

@@ -113,7 +113,65 @@ fn dedup_by_name(skills: Vec<ScannedSkill>) -> Vec<ScannedSkill> {
         .collect()
 }
 
-fn scan_agent_folders() -> Result<Vec<ScannedSkill>, Box<dyn std::error::Error + Send + Sync>> {
+/// Scan for skills and return structured info (for Tauri UI).
+pub fn scan_for_skills_structured(
+    config: &Config,
+    path: Option<&str>,
+) -> Result<Vec<skill_cookbook_relay::types::ScannedSkillInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    let skills = if let Some(p) = path {
+        let dir = std::path::Path::new(p);
+        if !dir.is_dir() {
+            return Err(format!("Not a directory: {}", p).into());
+        }
+        scan_path_impl(dir, "custom", 0).map_err(|e| e.to_string())?
+    } else {
+        scan_agent_folders()?
+    };
+
+    let skills = dedup_by_name(skills);
+    let existing = existing_skill_names(&config.chef_dir.join("skills"));
+
+    Ok(skills
+        .into_iter()
+        .map(|s| skill_cookbook_relay::types::ScannedSkillInfo {
+            name: s.name.clone(),
+            path: s.path.clone(),
+            already_in_chef: existing.contains(&s.name),
+            source_agent: s.client_id,
+        })
+        .collect())
+}
+
+/// Import selected skill paths into chef (for Tauri UI).
+pub fn import_skills_to_chef(
+    config: &Config,
+    paths: &[String],
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    let chef_skills_dir = config.chef_dir.join("skills");
+    let mut added = Vec::new();
+    for path_str in paths {
+        let skill_md = Path::new(path_str);
+        let src_dir = match skill_md.parent() {
+            Some(d) => d,
+            None => continue,
+        };
+        let name = src_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("skill")
+            .to_string();
+        let dest_dir = chef_skills_dir.join(&name);
+        copy_dir_recursive(src_dir, &dest_dir)?;
+        added.push(name);
+    }
+    if !added.is_empty() {
+        let msg = build_commit_message(&added);
+        git_add_commit(&config.chef_dir, &msg)?;
+    }
+    Ok(added.len())
+}
+
+pub fn scan_agent_folders() -> Result<Vec<ScannedSkill>, Box<dyn std::error::Error + Send + Sync>> {
     let apps = discover_apps_impl();
     let detected: Vec<_> = apps.clients.iter().filter(|c| c.detected).collect();
 

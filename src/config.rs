@@ -37,6 +37,13 @@ pub struct Config {
     #[serde(default = "default_studio_api_url")]
     pub studio_api_url: String,
 
+    /// User role: chef (creator) or cook (consumer).
+    #[serde(default)]
+    pub user_role: UserRole,
+    /// UI mode: local (React) or online (skills.runwaize.com).
+    #[serde(default)]
+    pub ui_mode: UiMode,
+
     /// Chef (creator) local source of truth; git repo. CLI + relay.
     #[serde(default = "default_chef_dir")]
     pub chef_dir: PathBuf,
@@ -70,6 +77,22 @@ fn default_guest_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".runwaize_skills_cookbook_guest")
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum UserRole {
+    Chef,
+    #[default]
+    Cook,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiMode {
+    #[default]
+    Local,
+    Online,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +137,9 @@ impl Default for Config {
             exposed_libraries: vec![],
             skills_web_url: "https://skills.runwaize.com".to_string(),
             studio_api_url: "https://app.supervaize.com/api/skills-studio/v1".to_string(),
+
+            user_role: UserRole::default(),
+            ui_mode: UiMode::default(),
 
             chef_dir: default_chef_dir(),
             guest_dir: default_guest_dir(),

@@ -51,6 +51,42 @@ pub fn write_manifest(
     Ok(())
 }
 
+/// Sync guest and return count of skills synced (for Tauri UI).
+pub fn sync_guest_count(
+    config: &skill_cookbook_relay::config::Config,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    let config = config.clone();
+    let guest_dir = config.guest_dir.clone();
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    rt.block_on(async {
+        let auth = Arc::new(
+            AuthManager::new(config.clone()).map_err(|e| e.to_string())?,
+        );
+        auth.initialize().await.map_err(|e| e.to_string())?;
+        if !auth.is_authenticated() {
+            return Err("Not authenticated. Run login first.".into());
+        }
+        let rss = RssClient::new(config.rss_api_url.clone(), auth);
+        let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
+        let mut skills = Vec::new();
+        for lib in &libraries {
+            let lib_skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            for s in lib_skills {
+                skills.push(GuestSkillEntry {
+                    skill_id: s.skill_id,
+                    name: s.name,
+                    description: s.description,
+                    library_id: Some(lib.library_id.clone()),
+                });
+            }
+        }
+        let count = skills.len();
+        let manifest = GuestManifest { skills };
+        write_manifest(&guest_dir, &manifest)?;
+        Ok(count)
+    })
+}
+
 /// Fetch curated skills from server (libraries + skills) and write manifest to guest dir.
 pub fn sync_guest_from_server(
     config: &skill_cookbook_relay::config::Config,

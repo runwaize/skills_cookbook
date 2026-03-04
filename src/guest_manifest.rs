@@ -19,6 +19,18 @@ pub struct GuestManifest {
     pub skills: Vec<GuestSkillEntry>,
 }
 
+/// Write manifest to guest dir.
+pub fn write_guest_manifest(guest_dir: &Path, manifest: &GuestManifest) -> crate::error::Result<()> {
+    std::fs::create_dir_all(guest_dir)
+        .map_err(|e| crate::error::RelayError::Config(format!("create guest dir: {}", e)))?;
+    let path = guest_dir.join(MANIFEST_FILENAME);
+    let data = serde_json::to_string_pretty(manifest)
+        .map_err(|e| crate::error::RelayError::Config(format!("serialize manifest: {}", e)))?;
+    std::fs::write(&path, data)
+        .map_err(|e| crate::error::RelayError::Config(format!("write manifest: {}", e)))?;
+    Ok(())
+}
+
 /// Read manifest from guest dir. Returns default if file missing.
 pub fn read_guest_manifest(guest_dir: &Path) -> crate::error::Result<GuestManifest> {
     let path = guest_dir.join(MANIFEST_FILENAME);

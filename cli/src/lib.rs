@@ -1,12 +1,12 @@
 //! Runwaize Skills Cookbook CLI — library API for Tauri and binary.
 
-mod chef;
-mod doctor;
-mod guest;
-mod init;
+pub mod chef;
+pub mod doctor;
+pub mod guest;
+pub mod init;
 mod install;
 mod library;
-mod search;
+pub mod search;
 mod workspace;
 
 #[cfg(test)]

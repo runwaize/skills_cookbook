@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.supervaize.skill-cookbook-relay",
   "build": {
-    "beforeDevCommand": "",
-    "devUrl": "https://skills.runwaize.com",
-    "beforeBuildCommand": "",
-    "frontendDist": "ui"
+    "beforeDevCommand": "cd local-ui && npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "cd local-ui && npm run build",
+    "frontendDist": "local-ui/dist"
   },
   "bundle": {
     "active": true,
@@ -33,7 +33,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self' https://skills.runwaize.com http://127.0.0.1:9123; script-src 'self' 'unsafe-inline' https://skills.runwaize.com; style-src 'self' 'unsafe-inline' https://skills.runwaize.com; connect-src 'self' https://skills.runwaize.com http://127.0.0.1:9123",
+      "csp": "default-src 'self' tauri: https://skills.runwaize.com http://127.0.0.1:9123; script-src 'self' 'unsafe-inline' https://skills.runwaize.com; style-src 'self' 'unsafe-inline' https://skills.runwaize.com https://fonts.googleapis.com data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' tauri: https://skills.runwaize.com http://127.0.0.1:9123 ipc: http://ipc.localhost; img-src 'self' data: blob: https://skills.runwaize.com",
       "assetProtocol": {
         "enable": true,
         "scope": [

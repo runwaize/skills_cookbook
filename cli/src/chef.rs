@@ -156,6 +156,142 @@ pub fn run_edit(args: &EditArgs) -> Result<(), Box<dyn std::error::Error + Send 
     open_in_editor(&skill_md)
 }
 
+/// Structured list of local skills (for Tauri UI).
+pub fn list_local_skills_structured(
+    config: &Config,
+) -> Result<Vec<skill_cookbook_relay::types::LocalSkill>, Box<dyn std::error::Error + Send + Sync>> {
+    let skills_dir = config.chef_dir.join("skills");
+    let entries = list_local_skills(&skills_dir)?;
+    Ok(entries
+        .into_iter()
+        .map(|(name, has_skill_md)| {
+            let path = skills_dir.join(&name).to_string_lossy().to_string();
+            skill_cookbook_relay::types::LocalSkill {
+                name,
+                has_skill_md,
+                path,
+            }
+        })
+        .collect())
+}
+
+/// Structured list of remote skills (for Tauri UI).
+pub fn list_remote_skills_structured(
+    config: &Config,
+) -> Result<Vec<skill_cookbook_relay::types::RemoteSkillInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    rt.block_on(async {
+        let auth = Arc::new(AuthManager::new(config.clone()).map_err(|e| e.to_string())?);
+        auth.initialize().await.map_err(|e| e.to_string())?;
+        if !auth.is_authenticated() {
+            return Err("Not authenticated. Run login first.".into());
+        }
+        let rss = RssClient::new(config.rss_api_url.clone(), auth);
+        let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
+        let mut result = Vec::new();
+        for lib in &libraries {
+            let skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            for s in skills {
+                result.push(skill_cookbook_relay::types::RemoteSkillInfo {
+                    library_name: lib.name.clone(),
+                    library_id: lib.library_id.clone(),
+                    skill_name: s.name,
+                    skill_id: s.skill_id,
+                    description: s.description,
+                });
+            }
+        }
+        Ok(result)
+    })
+}
+
+/// Add a skill by path (for Tauri UI, non-interactive).
+pub fn add_skill_to_chef(
+    config: &Config,
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let skill_md_path = skill_cookbook_relay::discovery::resolve_skill_md_path(path).map_err(|e| e.to_string())?;
+    let skill_name = skill_md_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("skill")
+        .to_string();
+    let dest_dir = config.chef_dir.join("skills").join(&skill_name);
+    std::fs::create_dir_all(&dest_dir).map_err(|e| format!("create dest dir: {}", e))?;
+    let dest_path = dest_dir.join("SKILL.md");
+    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| e.to_string())?;
+    std::fs::write(&dest_path, content).map_err(|e| format!("write: {}", e))?;
+    git_add_commit(&config.chef_dir, &format!("Add skill: {}", skill_name))?;
+    Ok(())
+}
+
+/// Sync chef and return structured result (for Tauri UI).
+pub fn sync_chef_structured(
+    config: &Config,
+    no_push: bool,
+) -> Result<skill_cookbook_relay::types::SyncResult, Box<dyn std::error::Error + Send + Sync>> {
+    // Commit
+    let committed = git_has_changes(&config.chef_dir)?;
+    if committed {
+        git_add_commit(&config.chef_dir, "Sync chef")?;
+    }
+
+    let mut skills_pushed = 0;
+    let pushed = !no_push;
+    if pushed {
+        skills_pushed = push_local_skills_count(config)?;
+    }
+
+    Ok(skill_cookbook_relay::types::SyncResult {
+        committed,
+        pushed,
+        skills_pushed,
+        guest_skills_updated: 0,
+    })
+}
+
+fn git_has_changes(repo_root: &Path) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let output = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("git status: {}", e))?;
+    Ok(!output.stdout.is_empty())
+}
+
+fn push_local_skills_count(config: &Config) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    let skills_dir = config.chef_dir.join("skills");
+    if !skills_dir.exists() {
+        return Ok(0);
+    }
+    let skills = scan_path_impl(&skills_dir, "chef", 2).map_err(|e| e.to_string())?;
+    if skills.is_empty() {
+        return Ok(0);
+    }
+
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    rt.block_on(async {
+        let auth = Arc::new(AuthManager::new(config.clone()).map_err(|e| e.to_string())?);
+        auth.initialize().await.map_err(|e| e.to_string())?;
+        if !auth.is_authenticated() {
+            return Ok(0usize);
+        }
+        let token = auth.get_access_token().await.map_err(|e| e.to_string())?;
+        let studio = StudioClient::new(config.studio_api_url.clone());
+        let mut pushed = 0usize;
+        for s in &skills {
+            let path = std::path::Path::new(&s.path);
+            if let Ok(zip_bytes) = build_skill_zip(path) {
+                if studio.upload_skill(&token, zip_bytes).await.is_ok() {
+                    pushed += 1;
+                }
+            }
+        }
+        Ok(pushed)
+    })
+}
+
 /// Scan skills_dir for subdirs, returning (name, has_skill_md) sorted alphabetically.
 /// Skips hidden directories (names starting with '.').
 fn list_local_skills(

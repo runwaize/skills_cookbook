@@ -14,7 +14,8 @@ Skill Cookbook Relay is a lightweight desktop application that acts as a secure 
 - 🔑 **Secret Management** - Resolves credentials from keychain, environment, or 1Password
 - 🚀 **MCP Server** - Exposes skills via standardized Model Context Protocol
 - 💾 **Smart Caching** - Local artifact cache with integrity verification
-- 🎨 **Native UI** - System tray app with context menu and about dialog
+- 🎨 **Local UI** - Built-in React UI with Chef (creator) and Cook (consumer) modes
+- 🌐 **Online UI** - Optional remote UI at skills.runwaize.com (switchable via tray menu)
 - 🛠️ **Local Dev Mode** - Run against a local web frontend via `TAURI_DEV_WEB` env var
 
 ## Architecture
@@ -143,6 +144,101 @@ Agent: [Uses skills.list MCP method]
 
 User: "Run the data-analysis skill on my CSV"
 Agent: [Uses skills.get to fetch verified skill]
+```
+
+## Local UI
+
+The app ships with a built-in React UI as the default interface. On first launch you'll pick a role:
+
+- **Chef** (creator) — create, edit, discover, and sync skills
+- **Cook** (consumer) — browse available skills and sync from server
+
+### Setting Up the Local UI
+
+```bash
+# Install npm dependencies (one-time)
+just ui-install
+
+# Run in development (Vite HMR + Tauri)
+just dev
+
+# Or build the UI and run the release binary
+just ui-build && just build-release
+```
+
+### Testing the Local UI Features
+
+#### Role Selection
+
+1. Run `just dev` — the app opens with the local React UI.
+2. On first launch you'll see the role selection screen. Pick **Chef** or **Cook**.
+3. Your choice is saved in `config.toml` as `user_role = "chef"` or `user_role = "cook"`.
+4. Switch roles anytime via **Settings > Change Role**, the sidebar footer "Switch Role" link, or the **system tray** (Chef Mode / Cook Mode).
+
+#### Chef Mode
+
+| Page | How to test |
+|------|-------------|
+| **Dashboard** | Shows local skill count, library count, MCP server status, and quick-action cards. |
+| **My Skills** | Lists skills in your `chef_dir/skills/` folder. Click **Edit** to open the inline SKILL.md editor, or the external-link icon to open in your system editor (`$EDITOR`). |
+| **Remote Skills** | Fetches libraries and skills from the server (requires login). Skills are grouped by library. |
+| **Discover** | Detects installed AI agents (Cursor, Claude Code, Codex, etc.). Click **Scan Agent Folders** to find SKILL.md files, then checkbox-select and **Import** them to your chef dir. You can also scan a custom path. |
+| **Sync** | Commits local changes (git add + commit). Toggle "Skip push" to commit only. Shows result: committed, pushed, skills count. |
+
+#### Cook Mode
+
+| Page | How to test |
+|------|-------------|
+| **Dashboard** | Shows manifest skill count, auth status, MCP server status. |
+| **Available Skills** | Displays the guest manifest (skills synced from server). |
+| **Sync** | Click **Sync Now** to fetch the latest manifest from the server. Shows count of synced skills. |
+
+#### Shared Pages
+
+| Page | How to test |
+|------|-------------|
+| **Relay Status** | Shows auth, MCP port, cache size, library count, last sync time. Has **Clear Cache** and **Refresh Skills** buttons. |
+| **Doctor** | Runs diagnostic checks (config, chef dir, guest dir, git repo, workspace ID, auth, MCP). Each check shows OK / Warning / Error with a message. |
+| **Settings** | View current role, UI mode, directory paths, and ports. Switch role or toggle to online UI. |
+
+#### Switching Between Local and Online UI
+
+- **Header**: Click the **Online** button in the top-right header.
+- **Settings page**: Click **Switch to Online UI**.
+- **System tray**: Right-click tray icon → **Local UI** or **Online UI**.
+
+The switch persists in `config.toml` as `ui_mode = "local"` or `ui_mode = "online"`.
+
+#### System Tray
+
+Right-click the tray icon to see:
+
+- About Skill Cookbook (version + web source)
+- Chef Mode / Cook Mode (switch role, emits event to frontend)
+- Local UI / Online UI (navigates the webview)
+- Show Window / Quit
+
+### Verifying Everything Works
+
+```bash
+# 1. All Rust tests pass (no breaking changes)
+just test
+# Expected: 50 tests pass (38 CLI + 12 relay)
+
+# 2. CLI tests pass
+just cli-test
+# Expected: 20+ tests pass
+
+# 3. TypeScript compiles
+cd local-ui && npx tsc --noEmit
+
+# 4. UI builds successfully
+just ui-build
+# Expected: dist/ with ~400KB JS + ~95KB CSS
+
+# 5. Full dev run
+just dev
+# Expected: Tauri window opens with local React UI
 ```
 
 ## Configuration

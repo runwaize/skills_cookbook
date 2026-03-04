@@ -227,6 +227,21 @@ appimage: build-app
 msi: build-app
     @echo "MSI created in target/release/bundle/msi/"
 
+# Local UI
+# ========
+
+# Install local-ui npm dependencies
+ui-install:
+    cd local-ui && npm install
+
+# Run local-ui dev server standalone
+ui-dev:
+    cd local-ui && npm run dev
+
+# Build local-ui for production
+ui-build:
+    cd local-ui && npm run build
+
 # Debugging
 # =========
 
