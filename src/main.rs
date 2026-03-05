@@ -56,6 +56,20 @@ impl WebSource {
 // ===== Existing commands =====
 
 #[tauri::command]
+async fn pick_folder(app: tauri::AppHandle, title: Option<String>) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title(title.as_deref().unwrap_or("Select folder"))
+        .pick_folder(move |folder| {
+            let _ = tx.send(folder.map(|p| p.to_string()));
+        });
+    rx.await
+        .map_err(|e| format!("dialog error: {}", e))
+}
+
+#[tauri::command]
 async fn get_relay_status(
     state: tauri::State<'_, Arc<RelayState>>,
 ) -> Result<types::RelayStatus, String> {
@@ -105,11 +119,127 @@ async fn get_config(
     state: tauri::State<'_, Arc<RelayState>>,
 ) -> Result<types::AppConfig, String> {
     let cfg = state.config.read();
+    let settings_dir = config::Config::base_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
     Ok(types::AppConfig {
         user_role: cfg.user_role.clone(),
         ui_mode: cfg.ui_mode.clone(),
+        settings_dir,
         chef_dir: cfg.chef_dir.to_string_lossy().to_string(),
-        guest_dir: cfg.guest_dir.to_string_lossy().to_string(),
+        cook_dir: cfg.guest_dir.to_string_lossy().to_string(),
+        workspace_id: cfg.workspace_id.clone(),
+        mcp_server_port: cfg.mcp_server_port,
+        bridge_port: cfg.bridge_port,
+    })
+}
+
+#[tauri::command]
+async fn update_config(
+    state: tauri::State<'_, Arc<RelayState>>,
+    chef_dir: Option<String>,
+    cook_dir: Option<String>,
+    workspace_id: Option<String>,
+    mcp_server_port: Option<u16>,
+    bridge_port: Option<u16>,
+) -> Result<types::AppConfig, String> {
+    let mut cfg = state.config.write();
+    if let Some(ref cd) = chef_dir {
+        cfg.chef_dir = std::path::PathBuf::from(cd);
+    }
+    if let Some(ref gd) = cook_dir {
+        cfg.guest_dir = std::path::PathBuf::from(gd);
+    }
+    if let Some(wid) = workspace_id {
+        cfg.workspace_id = if wid.is_empty() { None } else { Some(wid) };
+    }
+    if let Some(port) = mcp_server_port {
+        cfg.mcp_server_port = port;
+    }
+    if let Some(port) = bridge_port {
+        cfg.bridge_port = port;
+    }
+    cfg.save().map_err(|e| e.to_string())?;
+    let settings_dir = config::Config::base_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let result = types::AppConfig {
+        user_role: cfg.user_role.clone(),
+        ui_mode: cfg.ui_mode.clone(),
+        settings_dir,
+        chef_dir: cfg.chef_dir.to_string_lossy().to_string(),
+        cook_dir: cfg.guest_dir.to_string_lossy().to_string(),
+        workspace_id: cfg.workspace_id.clone(),
+        mcp_server_port: cfg.mcp_server_port,
+        bridge_port: cfg.bridge_port,
+    };
+    Ok(result)
+}
+
+#[tauri::command]
+async fn move_settings_dir(
+    state: tauri::State<'_, Arc<RelayState>>,
+    new_dir: String,
+) -> Result<types::AppConfig, String> {
+    let old_dir = config::Config::base_dir().map_err(|e| e.to_string())?;
+    let new_path = std::path::PathBuf::from(&new_dir);
+
+    if old_dir == new_path {
+        // No change needed — return current config
+        let cfg = state.config.read();
+        let settings_dir = old_dir.to_string_lossy().to_string();
+        return Ok(types::AppConfig {
+            user_role: cfg.user_role.clone(),
+            ui_mode: cfg.ui_mode.clone(),
+            settings_dir,
+            chef_dir: cfg.chef_dir.to_string_lossy().to_string(),
+            cook_dir: cfg.guest_dir.to_string_lossy().to_string(),
+            workspace_id: cfg.workspace_id.clone(),
+            mcp_server_port: cfg.mcp_server_port,
+            bridge_port: cfg.bridge_port,
+        });
+    }
+
+    // Create new dir and copy contents
+    std::fs::create_dir_all(&new_path)
+        .map_err(|e| format!("create new settings dir: {}", e))?;
+    copy_dir_recursive(&old_dir, &new_path)?;
+
+    // If chef/cook dirs were inside the old settings dir, update them to new location
+    {
+        let mut cfg = state.config.write();
+        if cfg.chef_dir.starts_with(&old_dir) {
+            if let Ok(rel) = cfg.chef_dir.strip_prefix(&old_dir) {
+                cfg.chef_dir = new_path.join(rel);
+            }
+        }
+        if cfg.guest_dir.starts_with(&old_dir) {
+            if let Ok(rel) = cfg.guest_dir.strip_prefix(&old_dir) {
+                cfg.guest_dir = new_path.join(rel);
+            }
+        }
+        // Save config to the NEW location (it was already copied, now overwrite with updated paths)
+        let config_path = new_path.join("config.toml");
+        let content = toml::to_string_pretty(&*cfg)
+            .map_err(|e| format!("serialize config: {}", e))?;
+        std::fs::write(&config_path, content)
+            .map_err(|e| format!("write config to new dir: {}", e))?;
+    }
+
+    // Write redirect file at default location so next startup finds the new dir
+    let default_dir = config::Config::default_base_dir();
+    std::fs::create_dir_all(&default_dir)
+        .map_err(|e| format!("create default dir for redirect: {}", e))?;
+    std::fs::write(default_dir.join("base_dir_redirect"), new_dir.as_bytes())
+        .map_err(|e| format!("write redirect: {}", e))?;
+
+    let cfg = state.config.read();
+    Ok(types::AppConfig {
+        user_role: cfg.user_role.clone(),
+        ui_mode: cfg.ui_mode.clone(),
+        settings_dir: new_dir,
+        chef_dir: cfg.chef_dir.to_string_lossy().to_string(),
+        cook_dir: cfg.guest_dir.to_string_lossy().to_string(),
         workspace_id: cfg.workspace_id.clone(),
         mcp_server_port: cfg.mcp_server_port,
         bridge_port: cfg.bridge_port,
@@ -683,6 +813,7 @@ async fn main() -> Result<()> {
         .manage(relay_state.clone())
         .invoke_handler(tauri::generate_handler![
             // Existing
+            pick_folder,
             get_relay_status,
             login_to_rss,
             logout_from_rss,
@@ -692,6 +823,8 @@ async fn main() -> Result<()> {
             wipe_all_data,
             // New for local UI
             get_config,
+            update_config,
+            move_settings_dir,
             set_user_role,
             switch_ui_mode,
             list_local_skills,

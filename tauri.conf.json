@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.supervaize.skill-cookbook-relay",
   "build": {
-    "beforeDevCommand": "cd local-ui && npm run dev",
+    "beforeDevCommand": "npm --prefix local-ui run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd local-ui && npm run build",
+    "beforeBuildCommand": "npm --prefix local-ui run build",
     "frontendDist": "local-ui/dist"
   },
   "bundle": {

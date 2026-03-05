@@ -13,7 +13,6 @@ import {
   BookOpen,
   ArrowDownToLine,
 } from 'lucide-react';
-import { useRole } from '@/contexts/RoleContext';
 import {
   Sidebar,
   SidebarContent,
@@ -26,56 +25,90 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from '@/components/ui/sidebar';
-import { Badge } from '@/components/ui/badge';
 
 const chefNav = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/chef' },
-  { label: 'My Skills', icon: FileText, path: '/chef/skills' },
+  { label: 'Local Skills', icon: FileText, path: '/chef/skills' },
   { label: 'Remote Skills', icon: Cloud, path: '/chef/remote' },
   { label: 'Discover', icon: Search, path: '/chef/discover' },
   { label: 'Sync', icon: RefreshCw, path: '/chef/sync' },
 ];
 
 const cookNav = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/cook' },
-  { label: 'Available Skills', icon: BookOpen, path: '/cook/manifest' },
+  { label: 'Local Skills', icon: BookOpen, path: '/cook/skills' },
   { label: 'Sync', icon: ArrowDownToLine, path: '/cook/sync' },
 ];
 
-const sharedNav = [
+const systemNav = [
   { label: 'Relay Status', icon: Activity, path: '/status' },
   { label: 'Doctor', icon: Stethoscope, path: '/doctor' },
   { label: 'Settings', icon: Settings, path: '/settings' },
 ];
 
 export function AppSidebar() {
-  const { role } = useRole();
   const location = useLocation();
   const navigate = useNavigate();
-
-  const roleNav = role === 'chef' ? chefNav : cookNav;
-  const RoleIcon = role === 'chef' ? ChefHat : UtensilsCrossed;
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <RoleIcon className="h-4 w-4" />
+            <ChefHat className="h-4 w-4" />
           </div>
           <div>
             <p className="text-sm font-semibold">Skill Cookbook</p>
-            <p className="text-xs text-muted-foreground capitalize">{role} Mode</p>
           </div>
         </div>
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Dashboard — top level, outside groups */}
         <SidebarGroup>
-          <SidebarGroupLabel>{role === 'chef' ? 'Chef' : 'Cook'}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {roleNav.map((item) => (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location.pathname === '/'}
+                  onClick={() => navigate('/')}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Dashboard</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>
+            <ChefHat className="h-3.5 w-3.5 mr-1" />
+            Chef
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {chefNav.map((item) => (
+                <SidebarMenuItem key={item.path}>
+                  <SidebarMenuButton
+                    isActive={location.pathname === item.path}
+                    onClick={() => navigate(item.path)}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>
+            <UtensilsCrossed className="h-3.5 w-3.5 mr-1" />
+            Cook
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {cookNav.map((item) => (
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton
                     isActive={location.pathname === item.path}
@@ -94,7 +127,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>System</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {sharedNav.map((item) => (
+              {systemNav.map((item) => (
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton
                     isActive={location.pathname === item.path}
@@ -111,18 +144,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
-        <div className="flex items-center justify-between">
-          <Badge variant="outline" className="capitalize">
-            {role}
-          </Badge>
-          <button
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => navigate('/select-role')}
-          >
-            Switch Role
-          </button>
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-1">v0.1.0</p>
+        <p className="text-[10px] text-muted-foreground">v0.1.0</p>
       </SidebarFooter>
     </Sidebar>
   );

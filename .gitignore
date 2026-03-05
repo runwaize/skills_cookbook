@@ -193,6 +193,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!local-ui/src/lib/
 lib64/
 parts/
 sdist/

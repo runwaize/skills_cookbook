@@ -22,8 +22,8 @@ mod tests {
     #[test]
     fn test_config_default_chef_guest_dirs() {
         let config = Config::default();
-        assert!(config.chef_dir.ends_with(".runwaize_skills_cookbook_chef"));
-        assert!(config.guest_dir.ends_with(".runwaize_skills_cookbook_guest"));
+        assert!(config.chef_dir.ends_with(".runwaize_skills_cookbook/chef"));
+        assert!(config.guest_dir.ends_with(".runwaize_skills_cookbook/cook"));
         assert_eq!(config.workspace_id, None);
     }
 
@@ -77,7 +77,7 @@ mod tests {
         env::set_var("CONFIG_DIR", config_dir.as_os_str());
         let config = Config::load().unwrap();
         assert_eq!(config.rss_api_url, "https://api.skills.cookbook/v1");
-        assert!(config_dir.join("skill-cookbook-relay").join("config.toml").exists());
+        assert!(config_dir.join("config.toml").exists());
     }
 
     #[test]
@@ -85,9 +85,8 @@ mod tests {
     fn test_config_malformed_toml() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path().to_path_buf();
-        let skill_relay_dir = config_dir.join("skill-cookbook-relay");
-        std::fs::create_dir_all(&skill_relay_dir).unwrap();
-        std::fs::write(skill_relay_dir.join("config.toml"), "invalid toml {").unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join("config.toml"), "invalid toml {").unwrap();
         env::set_var("CONFIG_DIR", config_dir.as_os_str());
         let result = Config::load();
         assert!(result.is_err());

@@ -311,8 +311,9 @@ pub struct ScannedSkillInfo {
 pub struct AppConfig {
     pub user_role: crate::config::UserRole,
     pub ui_mode: crate::config::UiMode,
+    pub settings_dir: String,
     pub chef_dir: String,
-    pub guest_dir: String,
+    pub cook_dir: String,
     pub workspace_id: Option<String>,
     pub mcp_server_port: u16,
     pub bridge_port: u16,

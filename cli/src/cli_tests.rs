@@ -39,8 +39,6 @@ mod tests {
         std::fs::create_dir_all(&config_dir).unwrap();
         env::set_var("CONFIG_DIR", config_dir.as_os_str());
 
-        let relay_dir = config_dir.join("skill-cookbook-relay");
-        std::fs::create_dir_all(&relay_dir).unwrap();
         let chef = temp.path().join("chef");
         let guest = temp.path().join("guest");
         std::fs::create_dir_all(&chef).unwrap();
@@ -66,8 +64,6 @@ mod tests {
         std::fs::create_dir_all(&config_dir).unwrap();
         env::set_var("CONFIG_DIR", config_dir.as_os_str());
 
-        let relay_dir = config_dir.join("skill-cookbook-relay");
-        std::fs::create_dir_all(&relay_dir).unwrap();
         let chef = temp.path().join("nonexistent_chef");
         let guest = temp.path().join("guest");
         std::fs::create_dir_all(&guest).unwrap();

@@ -67,16 +67,18 @@ fn default_studio_api_url() -> String {
     "https://app.supervaize.com/api/skills-studio/v1".to_string()
 }
 
-fn default_chef_dir() -> PathBuf {
+fn default_base_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".runwaize_skills_cookbook_chef")
+        .join(".runwaize_skills_cookbook")
+}
+
+fn default_chef_dir() -> PathBuf {
+    default_base_dir().join("chef")
 }
 
 fn default_guest_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".runwaize_skills_cookbook_guest")
+    default_base_dir().join("cook")
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -188,16 +190,35 @@ impl Config {
 
     /// Get the path to the config file
     fn config_path() -> Result<PathBuf> {
-        let config_dir = Self::config_dir()?;
-        Ok(config_dir.join("skill-cookbook-relay").join("config.toml"))
+        let base = Self::base_dir()?;
+        Ok(base.join("config.toml"))
     }
 
-    /// Config directory: CONFIG_DIR env var (for tests) or dirs::config_dir()
-    fn config_dir() -> Result<PathBuf> {
-        env::var_os("CONFIG_DIR")
-            .map(PathBuf::from)
-            .or_else(|| dirs::config_dir())
-            .ok_or_else(|| RelayError::Config("Cannot determine config directory".to_string()))
+    /// Base directory: CONFIG_DIR env var (for tests), redirect file, or default.
+    ///
+    /// In production, checks `~/.runwaize_skills_cookbook/base_dir_redirect` for a
+    /// custom location. If that file exists and points to a valid directory, use it.
+    pub fn base_dir() -> Result<PathBuf> {
+        if let Some(dir) = env::var_os("CONFIG_DIR") {
+            return Ok(PathBuf::from(dir));
+        }
+
+        let default = default_base_dir();
+        let redirect_file = default.join("base_dir_redirect");
+        if redirect_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&redirect_file) {
+                let custom = PathBuf::from(content.trim());
+                if custom.is_dir() {
+                    return Ok(custom);
+                }
+            }
+        }
+        Ok(default)
+    }
+
+    /// The hardcoded default base directory (before redirect).
+    pub fn default_base_dir() -> PathBuf {
+        default_base_dir()
     }
 
     /// Get the device ID for this relay instance
@@ -227,17 +248,16 @@ impl Config {
 
     /// Get the path to the device ID file
     fn device_id_path() -> Result<PathBuf> {
-        let config_dir = Self::config_dir()?;
-        Ok(config_dir.join("skill-cookbook-relay").join("device_id"))
+        let base = Self::base_dir()?;
+        Ok(base.join("device_id"))
     }
 
     /// Persistent directory for webview storage (localStorage, cookies).
-    /// Uses config_dir/skill-cookbook-relay/webview (same pattern as config.toml).
+    /// Uses base_dir/webview (same pattern as config.toml).
     /// Used on Windows/Linux; macOS 14+ uses data_store_identifier instead.
     #[cfg_attr(not(any(target_os = "windows", target_os = "linux")), allow(dead_code))]
     pub fn webview_data_dir() -> Result<PathBuf> {
-        let dir = Self::config_dir()?
-            .join("skill-cookbook-relay")
+        let dir = Self::base_dir()?
             .join("webview");
         std::fs::create_dir_all(&dir)
             .map_err(|e| RelayError::Config(format!("Failed to create webview dir: {}", e)))?;

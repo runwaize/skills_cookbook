@@ -5,10 +5,10 @@ use std::path::Path;
 
 #[derive(clap::Args, Debug)]
 pub struct InitArgs {
-    /// Use custom chef dir (default: ~/.runwaize_skills_cookbook_chef).
+    /// Use custom chef dir (default: ~/.runwaize_skills_cookbook/chef).
     #[arg(long)]
     pub chef_dir: Option<std::path::PathBuf>,
-    /// Use custom guest dir (default: ~/.runwaize_skills_cookbook_guest).
+    /// Use custom guest dir (default: ~/.runwaize_skills_cookbook/cook).
     #[arg(long)]
     pub guest_dir: Option<std::path::PathBuf>,
 }
@@ -44,13 +44,15 @@ pub fn run_init(args: &InitArgs) -> Result<(), Box<dyn std::error::Error + Send 
 fn default_chef_dir() -> std::path::PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".runwaize_skills_cookbook_chef")
+        .join(".runwaize_skills_cookbook")
+        .join("chef")
 }
 
 fn default_guest_dir() -> std::path::PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".runwaize_skills_cookbook_guest")
+        .join(".runwaize_skills_cookbook")
+        .join("cook")
 }
 
 fn init_git_repo(dir: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

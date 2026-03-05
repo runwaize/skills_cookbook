@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useRole } from '@/contexts/RoleContext';
 import { AppLayout } from '@/components/AppLayout';
-import { RoleSelectPage } from '@/pages/RoleSelectPage';
+import { DashboardPage } from '@/pages/shared/DashboardPage';
 import { ChefDashboard } from '@/pages/chef/ChefDashboard';
 import { SkillsList } from '@/pages/chef/SkillsList';
 import { RemoteSkillsList } from '@/pages/chef/RemoteSkillsList';
@@ -16,7 +16,7 @@ import { DoctorPage } from '@/pages/shared/DoctorPage';
 import { SettingsPage } from '@/pages/shared/SettingsPage';
 
 export function App() {
-  const { role, loading } = useRole();
+  const { loading } = useRole();
 
   if (loading) {
     return (
@@ -28,8 +28,9 @@ export function App() {
 
   return (
     <Routes>
-      <Route path="/select-role" element={<RoleSelectPage />} />
       <Route element={<AppLayout />}>
+        {/* Dashboard */}
+        <Route path="/" element={<DashboardPage />} />
         {/* Chef routes */}
         <Route path="/chef" element={<ChefDashboard />} />
         <Route path="/chef/skills" element={<SkillsList />} />
@@ -39,6 +40,7 @@ export function App() {
         <Route path="/chef/sync" element={<SyncPage />} />
         {/* Cook routes */}
         <Route path="/cook" element={<CookDashboard />} />
+        <Route path="/cook/skills" element={<ManifestView />} />
         <Route path="/cook/manifest" element={<ManifestView />} />
         <Route path="/cook/sync" element={<CookSyncView />} />
         {/* Shared routes */}
@@ -46,10 +48,7 @@ export function App() {
         <Route path="/doctor" element={<DoctorPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
-      <Route
-        path="*"
-        element={<Navigate to={role === 'chef' ? '/chef' : '/cook'} replace />}
-      />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

@@ -148,10 +148,7 @@ Agent: [Uses skills.get to fetch verified skill]
 
 ## Local UI
 
-The app ships with a built-in React UI as the default interface. On first launch you'll pick a role:
-
-- **Chef** (creator) — create, edit, discover, and sync skills
-- **Cook** (consumer) — browse available skills and sync from server
+The app ships with a built-in React UI as the default interface. Both Chef (creator) and Cook (consumer) sections are always visible in the sidebar — no role selection required.
 
 ### Setting Up the Local UI
 
@@ -159,95 +156,91 @@ The app ships with a built-in React UI as the default interface. On first launch
 # Install npm dependencies (one-time)
 just ui-install
 
-# Run in development (Vite HMR + Tauri)
+# Run in development (Vite HMR inside Tauri webview)
 just dev
 
-# Or build the UI and run the release binary
+# Or run UI and Rust separately (two terminals):
+# Terminal 1: cd local-ui && npm run dev
+# Terminal 2: cargo run --no-default-features
+
+# Build the UI and run the release binary
 just ui-build && just build-release
 ```
 
-### Testing the Local UI Features
+> **Note**: Running `npm run dev` alone opens the UI in a browser where Tauri commands are unavailable. You'll see mock data instead of real filesystem content. Use `just dev` or the two-terminal approach above for full functionality.
 
-#### Role Selection
+### Navigation
 
-1. Run `just dev` — the app opens with the local React UI.
-2. On first launch you'll see the role selection screen. Pick **Chef** or **Cook**.
-3. Your choice is saved in `config.toml` as `user_role = "chef"` or `user_role = "cook"`.
-4. Switch roles anytime via **Settings > Change Role**, the sidebar footer "Switch Role" link, or the **system tray** (Chef Mode / Cook Mode).
+- **Dashboard** (`/`) — Combined overview: Chef skill count, Cook skill count, library count, MCP status, quick-nav cards.
+- **Chef** section — Local Skills, Remote Skills, Discover, Sync.
+- **Cook** section — Local Skills (manifest), Sync.
+- **System** section — Relay Status, Doctor, Settings.
 
-#### Chef Mode
+### Chef Pages
 
-| Page | How to test |
+| Page | Description |
 |------|-------------|
-| **Dashboard** | Shows local skill count, library count, MCP server status, and quick-action cards. |
-| **My Skills** | Lists skills in your `chef_dir/skills/` folder. Click **Edit** to open the inline SKILL.md editor, or the external-link icon to open in your system editor (`$EDITOR`). |
+| **Local Skills** | Lists skills in your `chef_dir/skills/` folder. Click **Edit** to open the inline SKILL.md editor, or the external-link icon to open in your system editor (`$EDITOR`). |
 | **Remote Skills** | Fetches libraries and skills from the server (requires login). Skills are grouped by library. |
 | **Discover** | Detects installed AI agents (Cursor, Claude Code, Codex, etc.). Click **Scan Agent Folders** to find SKILL.md files, then checkbox-select and **Import** them to your chef dir. You can also scan a custom path. |
 | **Sync** | Commits local changes (git add + commit). Toggle "Skip push" to commit only. Shows result: committed, pushed, skills count. |
 
-#### Cook Mode
+### Cook Pages
 
-| Page | How to test |
+| Page | Description |
 |------|-------------|
-| **Dashboard** | Shows manifest skill count, auth status, MCP server status. |
-| **Available Skills** | Displays the guest manifest (skills synced from server). |
+| **Local Skills** | Displays the cook manifest (skills synced from server). Click **Sync from Server** to populate. |
 | **Sync** | Click **Sync Now** to fetch the latest manifest from the server. Shows count of synced skills. |
 
-#### Shared Pages
+### Shared Pages
 
-| Page | How to test |
+| Page | Description |
 |------|-------------|
 | **Relay Status** | Shows auth, MCP port, cache size, library count, last sync time. Has **Clear Cache** and **Refresh Skills** buttons. |
-| **Doctor** | Runs diagnostic checks (config, chef dir, guest dir, git repo, workspace ID, auth, MCP). Each check shows OK / Warning / Error with a message. |
-| **Settings** | View current role, UI mode, directory paths, and ports. Switch role or toggle to online UI. |
+| **Doctor** | Runs diagnostic checks (config, chef dir, cook dir, git repo, workspace ID, auth, MCP). Each check shows OK / Warning / Error with a message. |
+| **Settings** | Editable directories (settings folder, chef dir, cook dir) with folder picker, ports (MCP, Bridge). Save persists to `config.toml`. |
 
-#### Switching Between Local and Online UI
+### Switching to Online UI
 
 - **Header**: Click the **Online** button in the top-right header.
 - **Settings page**: Click **Switch to Online UI**.
 - **System tray**: Right-click tray icon → **Local UI** or **Online UI**.
 
-The switch persists in `config.toml` as `ui_mode = "local"` or `ui_mode = "online"`.
-
-#### System Tray
-
-Right-click the tray icon to see:
-
-- About Skill Cookbook (version + web source)
-- Chef Mode / Cook Mode (switch role, emits event to frontend)
-- Local UI / Online UI (navigates the webview)
-- Show Window / Quit
-
 ### Verifying Everything Works
 
 ```bash
-# 1. All Rust tests pass (no breaking changes)
+# 1. All Rust tests pass
 just test
-# Expected: 50 tests pass (38 CLI + 12 relay)
 
 # 2. CLI tests pass
 just cli-test
-# Expected: 20+ tests pass
 
 # 3. TypeScript compiles
 cd local-ui && npx tsc --noEmit
 
 # 4. UI builds successfully
 just ui-build
-# Expected: dist/ with ~400KB JS + ~95KB CSS
 
-# 5. Full dev run
+# 5. Full dev run (Tauri webview with real data)
 just dev
-# Expected: Tauri window opens with local React UI
 ```
 
 ## Configuration
 
-Configuration file location:
+Configuration file location (all platforms):
 
-- **macOS**: `~/Library/Application Support/skill-cookbook-relay/config.toml`
-- **Linux**: `~/.config/skill-cookbook-relay/config.toml`
-- **Windows**: `%APPDATA%\skill-cookbook-relay\config.toml`
+```
+~/.runwaize_skills_cookbook/
+├── config.toml          # App configuration
+├── device_id            # Device identity
+├── webview/             # Webview persistent storage
+├── chef/                # Creator workspace (git repo)
+│   └── skills/          # Skill folders with SKILL.md
+└── cook/                # Consumer manifest
+    └── manifest.json    # Synced from server
+```
+
+The settings folder can be moved via the Settings page. A redirect file (`base_dir_redirect`) at the default location points to the custom path.
 
 ### Example Configuration
 
@@ -477,22 +470,23 @@ skill_cookbook/
 │   ├── src/
 │   │   ├── lib.rs           # Library API for Tauri
 │   │   ├── main.rs          # CLI entrypoint
-│   │   ├── init.rs          # init command (chef/guest dirs)
+│   │   ├── init.rs          # init command (chef/cook dirs)
 │   │   ├── doctor.rs        # doctor command
-│   │   └── guest.rs         # Guest manifest (read/write)
+│   │   └── guest.rs         # Cook manifest (read/write)
 │   └── Cargo.toml
 ├── src/
-│   ├── main.rs           # Tauri application entry
+│   ├── main.rs           # Tauri application entry + commands
 │   ├── lib.rs            # Library exports
 │   ├── auth.rs           # OAuth & token management
 │   ├── cache.rs          # Artifact caching
-│   ├── config.rs         # Configuration
+│   ├── config.rs         # Configuration (~/.runwaize_skills_cookbook/)
 │   ├── crypto.rs         # Signature verification
 │   ├── error.rs          # Error types
 │   ├── relay.rs          # Core orchestration
 │   ├── rss_client.rs     # API client
 │   ├── types.rs          # Type definitions
 │   ├── variables.rs      # Secret resolution
+│   ├── guest_manifest.rs # Cook manifest read/write
 │   ├── bridge/
 │   │   ├── mod.rs
 │   │   └── handlers.rs   # Bridge REST API handlers
@@ -500,10 +494,16 @@ skill_cookbook/
 │       ├── mod.rs
 │       ├── server.rs     # MCP HTTP server
 │       └── handlers.rs   # MCP method handlers
-├── ui/
-│   ├── index.html        # Offline fallback page
-│   ├── styles.css
-│   └── app.js
+├── local-ui/                # React frontend (Vite + Tailwind + shadcn/ui)
+│   ├── src/
+│   │   ├── App.tsx          # Routes
+│   │   ├── lib/tauri.ts     # Tauri command wrappers + browser mocks
+│   │   ├── components/      # AppSidebar, AppHeader, ui/
+│   │   ├── contexts/        # RoleContext (config provider)
+│   │   └── pages/           # chef/, cook/, shared/
+│   ├── package.json
+│   └── vite.config.ts
+├── ui/                      # Offline fallback page
 ├── Cargo.toml
 ├── tauri.conf.json
 ├── justfile              # Task runner (just)
