@@ -5,6 +5,7 @@ use skill_cookbook_relay::discovery::{build_skill_zip, resolve_skill_md_path, sc
 use skill_cookbook_relay::{auth::AuthManager, rss_client::RssClient, studio_client::StudioClient};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::io;
 
 #[derive(clap::Args, Debug)]
 pub struct AddArgs {
@@ -53,6 +54,151 @@ pub struct SyncArgs {
     /// Skip pushing local changes to server (only commit and pull).
     #[arg(long)]
     pub no_push: bool,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct DeployClaudeArgs {}
+
+#[derive(clap::Args, Debug)]
+pub struct DeactivateArgs {
+    /// Skill name (folder name or deploy link name, e.g. "foo" or "group-foo").
+    pub skill_name: String,
+}
+
+/// Deploy chef skills to ~/.claude/skills by symlinking each skill dir (folder containing SKILL.md).
+pub fn run_deploy_claude(_args: &DeployClaudeArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = Config::load().map_err(|e| e.to_string())?;
+    let chef_skills_dir = config.chef_dir.join("skills");
+    if !chef_skills_dir.exists() {
+        return Err(format!("Chef skills dir does not exist: {}", chef_skills_dir.display()).into());
+    }
+
+    let claude_skills_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not determine home dir".to_string())?
+        .join(".claude")
+        .join("skills");
+    std::fs::create_dir_all(&claude_skills_dir).map_err(|e| format!("create {}: {}", claude_skills_dir.display(), e))?;
+
+    let skills = scan_path_impl(&chef_skills_dir, "claude", 0).map_err(|e| e.to_string())?;
+    if skills.is_empty() {
+        println!("No skills found in {}. Nothing to deploy.", chef_skills_dir.display());
+        return Ok(());
+    }
+
+    let mut linked = 0;
+    for s in &skills {
+        // s.path is the path to SKILL.md; skill dir is its parent.
+        let skill_md_path = Path::new(&s.path);
+        let skill_dir = skill_md_path.parent().ok_or_else(|| format!("Invalid skill path: {}", s.path))?;
+        let link_name = link_name_for_skill_dir(skill_dir, &chef_skills_dir);
+        let link_path = claude_skills_dir.join(&link_name);
+
+        if link_path.exists() {
+            std::fs::remove_file(&link_path).or_else(|e| {
+                if link_path.is_dir() {
+                    std::fs::remove_dir_all(&link_path)
+                } else {
+                    Err(e)
+                }
+            }).map_err(|e| format!("remove existing {:?}: {}", link_path, e))?;
+        }
+
+        symlink_dir(skill_dir, &link_path).map_err(|e| format!("symlink {} -> {}: {}", skill_dir.display(), link_path.display(), e))?;
+        println!("  {} -> {}", link_name, skill_dir.display());
+        linked += 1;
+    }
+    println!("Deployed {} skill(s) to {}.", linked, claude_skills_dir.display());
+    Ok(())
+}
+
+/// Unique link name: relative path from chef_skills_dir with path separators replaced by "-".
+fn link_name_for_skill_dir(skill_dir: &Path, chef_skills_dir: &Path) -> String {
+    let relative = skill_dir
+        .strip_prefix(chef_skills_dir)
+        .unwrap_or(skill_dir);
+    let s = relative.to_string_lossy();
+    let sep = std::path::MAIN_SEPARATOR;
+    s.replace(sep, "-")
+}
+
+#[cfg(unix)]
+fn symlink_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(src, dst)
+}
+
+#[cfg(windows)]
+fn symlink_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    std::os::windows::fs::symlink_dir(src, dst)
+}
+
+/// Move skill to chef/skills-inactive; remove ~/.claude/skills link if present.
+pub fn run_deactivate(args: &DeactivateArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = Config::load().map_err(|e| e.to_string())?;
+    let chef_skills_dir = config.chef_dir.join("skills");
+    let skills_inactive_dir = config.chef_dir.join("skills-inactive");
+
+    if !chef_skills_dir.exists() {
+        return Err(format!("Chef skills dir does not exist: {}", chef_skills_dir.display()).into());
+    }
+
+    let skill_dir = find_skill_dir_by_name(&chef_skills_dir, &args.skill_name)
+        .ok_or_else(|| format!("Skill '{}' not found in {}", args.skill_name, chef_skills_dir.display()))?;
+
+    let link_name = link_name_for_skill_dir(&skill_dir, &chef_skills_dir);
+    let relative = skill_dir
+        .strip_prefix(&chef_skills_dir)
+        .map_err(|_| format!("Skill path not under chef skills: {}", skill_dir.display()))?;
+    let dest = skills_inactive_dir.join(relative);
+
+    if dest.exists() {
+        return Err(format!("Destination already exists: {}. Remove or rename it first.", dest.display()).into());
+    }
+
+    std::fs::create_dir_all(dest.parent().unwrap_or(&skills_inactive_dir))
+        .map_err(|e| format!("create skills-inactive parent: {}", e))?;
+    std::fs::rename(&skill_dir, &dest).map_err(|e| format!("move {} to {}: {}", skill_dir.display(), dest.display(), e))?;
+    println!("Moved {} -> {}", skill_dir.display(), dest.display());
+
+    let mut removed_from_claude = false;
+    if let Some(home) = dirs::home_dir() {
+        let claude_skills_dir = home.join(".claude").join("skills");
+        let link_path = claude_skills_dir.join(&link_name);
+        if link_path.exists() {
+            std::fs::remove_file(&link_path).or_else(|e| {
+                if link_path.is_dir() {
+                    std::fs::remove_dir_all(&link_path)
+                } else {
+                    Err(e)
+                }
+            }).map_err(|e| format!("remove Claude link {}: {}", link_path.display(), e))?;
+            println!("Removed Claude link: {}", link_path.display());
+            removed_from_claude = true;
+        }
+    }
+
+    if removed_from_claude {
+        println!();
+        println!("Reminder: restart your Claude Code (or other Claude) instances so they stop using the deactivated skill.");
+    }
+
+    Ok(())
+}
+
+/// Resolve SKILLNAME to a skill dir under chef_skills_dir: try direct child first, then match by deploy link name.
+fn find_skill_dir_by_name(chef_skills_dir: &Path, skill_name: &str) -> Option<PathBuf> {
+    let direct = chef_skills_dir.join(skill_name);
+    if direct.is_dir() && direct.join("SKILL.md").exists() {
+        return Some(direct);
+    }
+    let skills = scan_path_impl(chef_skills_dir, "claude", 0).ok()?;
+    for s in skills {
+        let skill_md_path = Path::new(&s.path);
+        let skill_dir = skill_md_path.parent()?;
+        if link_name_for_skill_dir(skill_dir, chef_skills_dir) == skill_name {
+            return Some(skill_dir.to_path_buf());
+        }
+    }
+    None
 }
 
 /// Sync chef: commit local, optionally push to server.

@@ -146,6 +146,13 @@ cli-run CMD="usage":
 cli-test:
     cargo test -p runwaize_skills_cookbook_cli
 
+# Build CLI and install to PREFIX/bin (default: ~/.local)
+# Usage: just cli-install [PREFIX]; e.g. just cli-install /usr/local (needs sudo)
+cli-install PREFIX='~/.local':
+    just cli
+    bash -c 'd="{{PREFIX}}/bin"; case "\$d" in ~*) d="\$HOME\${d#~}"; esac; mkdir -p "\$d"; cp target/release/skills_cookbook "\$d/skills_cookbook"'
+    @echo "Installed to {{PREFIX}}/bin/skills_cookbook — ensure {{PREFIX}}/bin is on your PATH"
+
 # Build CLI in debug (faster compile)
 cli-debug:
     cargo build -p runwaize_skills_cookbook_cli

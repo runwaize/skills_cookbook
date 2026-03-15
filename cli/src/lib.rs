@@ -71,6 +71,19 @@ pub enum ChefSub {
     Sync(chef::SyncArgs),
     /// Search for SKILL.md files and add selected ones to chef.
     Search(search::SearchArgs),
+    /// Deploy chef skills to a target (e.g. Claude Code).
+    Deploy {
+        #[command(subcommand)]
+        sub: DeploySub,
+    },
+    /// Move skill to skills-inactive and remove Claude deploy link if present.
+    Deactivate(chef::DeactivateArgs),
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum DeploySub {
+    /// Symlink chef skills into ~/.claude/skills (skill dir = folder containing SKILL.md).
+    Claude(chef::DeployClaudeArgs),
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -133,6 +146,10 @@ fn run_command(cli: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>
             ChefSub::Add(args) => chef::run_add(args),
             ChefSub::Sync(args) => run_sync(args),
             ChefSub::Search(args) => search::run_search(args),
+            ChefSub::Deploy { sub } => match sub {
+                DeploySub::Claude(args) => chef::run_deploy_claude(args),
+            },
+            ChefSub::Deactivate(args) => chef::run_deactivate(args),
         },
         Command::Skill { sub } => match sub {
             SkillSub::Status(args) => library::run_skill_status(args),
@@ -175,6 +192,8 @@ fn print_help() {
     println!("    chef add <path>        Add skill to chef dir");
     println!("    chef sync [--no-push]  Sync chef and guest");
     println!("    chef search [path]     Scan for skills and add selected to chef");
+    println!("    chef deploy claude     Symlink chef skills into ~/.claude/skills");
+    println!("    chef deactivate <name> Move skill to skills-inactive, remove Claude link");
     println!();
     println!("  skill status <id> <status>  Set skill status (API TBD)");
     println!("  library add|remove|add-skill|remove-skill  Manage libraries (API TBD)");

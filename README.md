@@ -28,7 +28,7 @@ Skill Cookbook Relay is a lightweight desktop application that acts as a secure 
          │ MCP Protocol (localhost:9876)
          │
 ┌────────▼────────────────────────────────┐
-│  Skill Cookbook Relay (Tauri + Rust)   │
+│  Skill Cookbook Relay (Tauri + Rust)    │
 │  ┌──────────────────────────────────┐   │
 │  │  MCP Server                      │   │
 │  │  ├─ skills.list, skills.get      │   │
@@ -178,27 +178,27 @@ just ui-build && just build-release
 
 ### Chef Pages
 
-| Page | Description |
-|------|-------------|
-| **Local Skills** | Lists skills in your `chef_dir/skills/` folder. Click **Edit** to open the inline SKILL.md editor, or the external-link icon to open in your system editor (`$EDITOR`). |
-| **Remote Skills** | Fetches libraries and skills from the server (requires login). Skills are grouped by library. |
-| **Discover** | Detects installed AI agents (Cursor, Claude Code, Codex, etc.). Click **Scan Agent Folders** to find SKILL.md files, then checkbox-select and **Import** them to your chef dir. You can also scan a custom path. |
-| **Sync** | Commits local changes (git add + commit). Toggle "Skip push" to commit only. Shows result: committed, pushed, skills count. |
+| Page              | Description                                                                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Local Skills**  | Lists skills in your `chef_dir/skills/` folder. Click **Edit** to open the inline SKILL.md editor, or the external-link icon to open in your system editor (`$EDITOR`).                                          |
+| **Remote Skills** | Fetches libraries and skills from the server (requires login). Skills are grouped by library.                                                                                                                    |
+| **Discover**      | Detects installed AI agents (Cursor, Claude Code, Codex, etc.). Click **Scan Agent Folders** to find SKILL.md files, then checkbox-select and **Import** them to your chef dir. You can also scan a custom path. |
+| **Sync**          | Commits local changes (git add + commit). Toggle "Skip push" to commit only. Shows result: committed, pushed, skills count.                                                                                      |
 
 ### Cook Pages
 
-| Page | Description |
-|------|-------------|
+| Page             | Description                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
 | **Local Skills** | Displays the cook manifest (skills synced from server). Click **Sync from Server** to populate. |
-| **Sync** | Click **Sync Now** to fetch the latest manifest from the server. Shows count of synced skills. |
+| **Sync**         | Click **Sync Now** to fetch the latest manifest from the server. Shows count of synced skills.  |
 
 ### Shared Pages
 
-| Page | Description |
-|------|-------------|
-| **Relay Status** | Shows auth, MCP port, cache size, library count, last sync time. Has **Clear Cache** and **Refresh Skills** buttons. |
-| **Doctor** | Runs diagnostic checks (config, chef dir, cook dir, git repo, workspace ID, auth, MCP). Each check shows OK / Warning / Error with a message. |
-| **Settings** | Editable directories (settings folder, chef dir, cook dir) with folder picker, ports (MCP, Bridge). Save persists to `config.toml`. |
+| Page             | Description                                                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Relay Status** | Shows auth, MCP port, cache size, library count, last sync time. Has **Clear Cache** and **Refresh Skills** buttons.                          |
+| **Doctor**       | Runs diagnostic checks (config, chef dir, cook dir, git repo, workspace ID, auth, MCP). Each check shows OK / Warning / Error with a message. |
+| **Settings**     | Editable directories (settings folder, chef dir, cook dir) with folder picker, ports (MCP, Bridge). Save persists to `config.toml`.           |
 
 ### Switching to Online UI
 
