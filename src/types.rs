@@ -265,6 +265,19 @@ pub struct LocalSkill {
     pub name: String,
     pub has_skill_md: bool,
     pub path: String,
+    pub status: String,
+    pub version: String,
+    pub tags: Vec<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillFileEntry {
+    pub relative_path: String,
+    pub name: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub extension: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

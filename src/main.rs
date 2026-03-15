@@ -13,6 +13,7 @@ mod guest_manifest;
 mod mcp;
 mod relay;
 mod rss_client;
+mod skill_db;
 mod studio_client;
 mod types;
 mod variables;
@@ -22,7 +23,7 @@ use config::{UiMode, UserRole};
 use relay::RelayState;
 use std::path::Path;
 use std::sync::Arc;
-use tauri::{Emitter, Manager, WebviewUrl};
+use tauri::{Manager, WebviewUrl};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Fixed 16-byte identifier for WKWebView data store (macOS 14+). Derived from app identifier
@@ -305,11 +306,12 @@ async fn list_local_skills(
     let cfg = state.config.read();
     let skills_dir = cfg.chef_dir.join("skills");
     drop(cfg);
-    list_local_skills_impl(&skills_dir).map_err(|e| e.to_string())
+    list_local_skills_impl(&skills_dir, &state.skill_db).map_err(|e| e.to_string())
 }
 
 fn list_local_skills_impl(
     skills_dir: &Path,
+    skill_db: &skill_db::SkillDb,
 ) -> std::result::Result<Vec<types::LocalSkill>, String> {
     if !skills_dir.exists() {
         return Ok(vec![]);
@@ -327,10 +329,18 @@ fn list_local_skills_impl(
         }
         let has_skill_md = entry.path().join("SKILL.md").exists();
         let path = entry.path().to_string_lossy().to_string();
+
+        // Join with SQLite metadata (auto-create if missing)
+        let meta = skill_db.ensure_exists(&name).map_err(|e| e.to_string())?;
+
         result.push(types::LocalSkill {
             name,
             has_skill_md,
             path,
+            status: meta.status,
+            version: meta.version,
+            tags: meta.tags,
+            description: meta.description,
         });
     }
     result.sort_by(|a, b| a.name.cmp(&b.name));
@@ -706,6 +716,191 @@ async fn init_cookbook(
     Ok(())
 }
 
+// ===== Skill file tree & metadata commands =====
+
+fn validate_relative_path(rel: &str) -> std::result::Result<(), String> {
+    if rel.contains("..") {
+        return Err("Path must not contain '..'".to_string());
+    }
+    if rel.starts_with('/') || rel.starts_with('\\') {
+        return Err("Path must be relative".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_skill_files(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+) -> Result<Vec<types::SkillFileEntry>, String> {
+    let cfg = state.config.read();
+    let skill_dir = cfg.chef_dir.join("skills").join(&name);
+    drop(cfg);
+
+    if !skill_dir.is_dir() {
+        return Err(format!("Skill directory not found: {}", name));
+    }
+
+    fn walk(base: &Path, prefix: &str) -> std::result::Result<Vec<types::SkillFileEntry>, String> {
+        let mut entries = Vec::new();
+        let read = std::fs::read_dir(base).map_err(|e| e.to_string())?;
+        for entry in read {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            if file_name.starts_with('.') {
+                continue;
+            }
+            let rel = if prefix.is_empty() {
+                file_name.clone()
+            } else {
+                format!("{}/{}", prefix, file_name)
+            };
+            let meta = entry.metadata().map_err(|e| e.to_string())?;
+            let is_dir = meta.is_dir();
+            let size = if is_dir { 0 } else { meta.len() };
+            let extension = if is_dir {
+                None
+            } else {
+                Path::new(&file_name)
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_string())
+            };
+            entries.push(types::SkillFileEntry {
+                relative_path: rel.clone(),
+                name: file_name,
+                is_dir,
+                size,
+                extension,
+            });
+            if is_dir {
+                entries.extend(walk(&entry.path(), &rel)?);
+            }
+        }
+        Ok(entries)
+    }
+
+    walk(&skill_dir, "")
+}
+
+#[tauri::command]
+async fn read_skill_file(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    relative_path: String,
+) -> Result<String, String> {
+    validate_relative_path(&relative_path)?;
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join(&relative_path);
+    std::fs::read_to_string(&path).map_err(|e| format!("read {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+async fn write_skill_file(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    relative_path: String,
+    content: String,
+) -> Result<(), String> {
+    validate_relative_path(&relative_path)?;
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join(&relative_path);
+    std::fs::write(&path, content).map_err(|e| format!("write {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+async fn create_skill_file(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    relative_path: String,
+    content: String,
+) -> Result<(), String> {
+    validate_relative_path(&relative_path)?;
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join(&relative_path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create dirs: {}", e))?;
+    }
+    std::fs::write(&path, content).map_err(|e| format!("create {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+async fn create_skill_folder(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    relative_path: String,
+) -> Result<(), String> {
+    validate_relative_path(&relative_path)?;
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join(&relative_path);
+    std::fs::create_dir_all(&path).map_err(|e| format!("create folder: {}", e))
+}
+
+#[tauri::command]
+async fn delete_skill_file(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    relative_path: String,
+) -> Result<(), String> {
+    validate_relative_path(&relative_path)?;
+    let cfg = state.config.read();
+    let path = cfg.chef_dir.join("skills").join(&name).join(&relative_path);
+    if path.is_dir() {
+        std::fs::remove_dir(&path).map_err(|e| format!("delete folder: {}", e))
+    } else {
+        std::fs::remove_file(&path).map_err(|e| format!("delete file: {}", e))
+    }
+}
+
+#[tauri::command]
+async fn rename_skill_file(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    old_path: String,
+    new_path: String,
+) -> Result<(), String> {
+    validate_relative_path(&old_path)?;
+    validate_relative_path(&new_path)?;
+    let cfg = state.config.read();
+    let base = cfg.chef_dir.join("skills").join(&name);
+    let src = base.join(&old_path);
+    let dst = base.join(&new_path);
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create dirs: {}", e))?;
+    }
+    std::fs::rename(&src, &dst).map_err(|e| format!("rename: {}", e))
+}
+
+#[tauri::command]
+async fn get_skill_meta(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+) -> Result<skill_db::SkillMeta, String> {
+    state
+        .skill_db
+        .ensure_exists(&name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_skill_meta(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    status: String,
+    version: String,
+    tags: Vec<String>,
+    description: Option<String>,
+) -> Result<skill_db::SkillMeta, String> {
+    state
+        .skill_db
+        .upsert(&name, &status, &version, &tags, description.as_deref())
+        .map_err(|e| e.to_string())?;
+    state
+        .skill_db
+        .get(&name)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "skill not found after upsert".to_string())
+}
+
 // ===== Helper functions =====
 
 fn git_add_commit_impl(repo_root: &Path, message: &str) -> std::result::Result<(), String> {
@@ -841,6 +1036,16 @@ async fn main() -> Result<()> {
             sync_guest,
             run_doctor,
             init_cookbook,
+            // Skill file tree & metadata
+            list_skill_files,
+            read_skill_file,
+            write_skill_file,
+            create_skill_file,
+            create_skill_folder,
+            delete_skill_file,
+            rename_skill_file,
+            get_skill_meta,
+            update_skill_meta,
         ])
         .setup(move |app| {
             let bridge_origin = Some(web_source.url.clone());
@@ -949,10 +1154,8 @@ async fn main() -> Result<()> {
                 let about_item =
                     MenuItemBuilder::with_id("about", "About Skill Cookbook").build(app)?;
                 let show_item = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
-                let chef_item =
-                    MenuItemBuilder::with_id("role_chef", "Chef Mode").build(app)?;
-                let cook_item =
-                    MenuItemBuilder::with_id("role_cook", "Cook Mode").build(app)?;
+                let settings_item =
+                    MenuItemBuilder::with_id("settings", "Settings").build(app)?;
                 let local_ui_item =
                     MenuItemBuilder::with_id("ui_local", "Local UI").build(app)?;
                 let online_ui_item =
@@ -962,13 +1165,12 @@ async fn main() -> Result<()> {
                 let menu = MenuBuilder::new(app)
                     .item(&about_item)
                     .item(&PredefinedMenuItem::separator(app)?)
-                    .item(&chef_item)
-                    .item(&cook_item)
+                    .item(&show_item)
+                    .item(&settings_item)
                     .item(&PredefinedMenuItem::separator(app)?)
                     .item(&local_ui_item)
                     .item(&online_ui_item)
                     .item(&PredefinedMenuItem::separator(app)?)
-                    .item(&show_item)
                     .item(&quit_item)
                     .build()?;
 
@@ -999,25 +1201,17 @@ async fn main() -> Result<()> {
                                     let _ = window.set_focus();
                                 }
                             }
-                            "role_chef" | "role_cook" => {
-                                let role = if event.id().as_ref() == "role_chef" {
-                                    UserRole::Chef
-                                } else {
-                                    UserRole::Cook
-                                };
-                                let relay = relay_for_tray.clone();
-                                let handle = app_handle.clone();
-                                tauri::async_runtime::spawn(async move {
-                                    let mut cfg = relay.config.write();
-                                    cfg.user_role = role.clone();
-                                    let _ = cfg.save();
-                                    drop(cfg);
-                                    let role_str = match role {
-                                        UserRole::Chef => "chef",
-                                        UserRole::Cook => "cook",
-                                    };
-                                    let _ = handle.emit("role-changed", role_str);
-                                });
+                            "settings" => {
+                                if let Some(window) = app_handle.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                    // Navigate to settings in local UI
+                                    if let Ok(parsed) =
+                                        tauri::Url::parse("tauri://localhost/settings")
+                                    {
+                                        let _ = window.navigate(parsed);
+                                    }
+                                }
                             }
                             "ui_local" | "ui_online" => {
                                 let mode = if event.id().as_ref() == "ui_local" {

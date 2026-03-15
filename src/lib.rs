@@ -10,6 +10,7 @@ pub mod guest_manifest;
 pub mod mcp;
 pub mod relay;
 pub mod rss_client;
+pub mod skill_db;
 pub mod studio_client;
 pub mod types;
 pub mod variables;

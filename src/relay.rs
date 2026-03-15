@@ -5,6 +5,7 @@ use crate::crypto;
 use crate::error::{RelayError, Result};
 use crate::guest_manifest;
 use crate::rss_client::RssClient;
+use crate::skill_db::SkillDb;
 use crate::types::*;
 use crate::variables::VariableResolver;
 use chrono::Utc;
@@ -20,6 +21,7 @@ pub struct RelayState {
     signing_key: Arc<RwLock<Option<String>>>,
     last_sync: Arc<RwLock<Option<chrono::DateTime<chrono::Utc>>>>,
     sync_cursor: Arc<RwLock<Option<String>>>,
+    pub skill_db: Arc<SkillDb>,
 }
 
 impl RelayState {
@@ -44,6 +46,10 @@ impl RelayState {
         // Initialize variable resolver
         let variable_resolver = Arc::new(RwLock::new(VariableResolver::new(None, None)));
 
+        // Initialize skill metadata database
+        let base_dir = Config::base_dir()?;
+        let skill_db = Arc::new(SkillDb::open(&base_dir)?);
+
         let state = Self {
             config: Arc::new(RwLock::new(config)),
             auth_manager,
@@ -53,6 +59,7 @@ impl RelayState {
             signing_key: Arc::new(RwLock::new(None)),
             last_sync: Arc::new(RwLock::new(None)),
             sync_cursor: Arc::new(RwLock::new(None)),
+            skill_db,
         };
 
         // Start background sync task
@@ -419,6 +426,7 @@ impl RelayState {
             signing_key: self.signing_key.clone(),
             last_sync: self.last_sync.clone(),
             sync_cursor: self.sync_cursor.clone(),
+            skill_db: self.skill_db.clone(),
         }
     }
 }

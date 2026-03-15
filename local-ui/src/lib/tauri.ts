@@ -32,6 +32,28 @@ export interface LocalSkill {
   name: string;
   has_skill_md: boolean;
   path: string;
+  status: string;
+  version: string;
+  tags: string[];
+  description: string | null;
+}
+
+export interface SkillFileEntry {
+  relative_path: string;
+  name: string;
+  is_dir: boolean;
+  size: number;
+  extension: string | null;
+}
+
+export interface SkillMeta {
+  name: string;
+  status: string;
+  version: string;
+  tags: string[];
+  description: string | null;
+  updated_at: string;
+  synced_at: string | null;
 }
 
 export interface RemoteSkillInfo {
@@ -122,9 +144,27 @@ const mockConfig: AppConfig = {
 // ---- Mock data for browser dev mode ----
 
 const mockSkills: LocalSkill[] = [
-  { name: 'example-skill-1', has_skill_md: true, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-1` },
-  { name: 'example-skill-2', has_skill_md: false, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-2` },
+  { name: 'example-skill-1', has_skill_md: true, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-1`, status: 'draft', version: '0.1.0', tags: ['demo'], description: 'An example skill' },
+  { name: 'example-skill-2', has_skill_md: false, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-2`, status: 'published', version: '1.0.0', tags: [], description: null },
 ];
+
+const mockFileTree: SkillFileEntry[] = [
+  { relative_path: 'SKILL.md', name: 'SKILL.md', is_dir: false, size: 1024, extension: 'md' },
+  { relative_path: 'references', name: 'references', is_dir: true, size: 0, extension: null },
+  { relative_path: 'references/guide.md', name: 'guide.md', is_dir: false, size: 512, extension: 'md' },
+  { relative_path: 'examples', name: 'examples', is_dir: true, size: 0, extension: null },
+  { relative_path: 'examples/basic.py', name: 'basic.py', is_dir: false, size: 256, extension: 'py' },
+];
+
+const mockMeta: SkillMeta = {
+  name: 'example-skill-1',
+  status: 'draft',
+  version: '0.1.0',
+  tags: ['demo'],
+  description: 'An example skill',
+  updated_at: new Date().toISOString(),
+  synced_at: null,
+};
 
 const mockManifest: GuestManifest = { skills: [] };
 
@@ -143,6 +183,15 @@ const mockRelayStatus: RelayStatus = {
 };
 
 // ---- Tauri command wrappers ----
+
+const TEXT_EXTENSIONS = new Set([
+  'md', 'txt', 'json', 'yaml', 'yml', 'toml', 'env',
+  'py', 'js', 'ts', 'rs', 'sh', 'css', 'html', 'xml', 'csv',
+]);
+
+export function isTextFile(ext: string | null): boolean {
+  return ext !== null && TEXT_EXTENSIONS.has(ext.toLowerCase());
+}
 
 export const commands = {
   pickFolder: (title?: string) => safeInvoke<string | null>('pick_folder', { title }),
@@ -185,6 +234,32 @@ export const commands = {
     safeInvoke<void>('write_skill_content', { name, content }),
   openSkillInEditor: (name: string) => safeInvoke<void>('open_skill_in_editor', { name }),
   syncChef: (noPush: boolean) => safeInvoke<SyncResult>('sync_chef', { noPush }),
+
+  // Skill file tree & metadata
+  listSkillFiles: (name: string) =>
+    isTauri
+      ? safeInvoke<SkillFileEntry[]>('list_skill_files', { name })
+      : Promise.resolve(mockFileTree),
+  readSkillFile: (name: string, relativePath: string) =>
+    isTauri
+      ? safeInvoke<string>('read_skill_file', { name, relativePath })
+      : Promise.resolve(`# Mock content for ${relativePath}`),
+  writeSkillFile: (name: string, relativePath: string, content: string) =>
+    safeInvoke<void>('write_skill_file', { name, relativePath, content }),
+  createSkillFile: (name: string, relativePath: string, content: string) =>
+    safeInvoke<void>('create_skill_file', { name, relativePath, content }),
+  createSkillFolder: (name: string, relativePath: string) =>
+    safeInvoke<void>('create_skill_folder', { name, relativePath }),
+  deleteSkillFile: (name: string, relativePath: string) =>
+    safeInvoke<void>('delete_skill_file', { name, relativePath }),
+  renameSkillFile: (name: string, oldPath: string, newPath: string) =>
+    safeInvoke<void>('rename_skill_file', { name, oldPath, newPath }),
+  getSkillMeta: (name: string) =>
+    isTauri
+      ? safeInvoke<SkillMeta>('get_skill_meta', { name })
+      : Promise.resolve({ ...mockMeta, name }),
+  updateSkillMeta: (name: string, status: string, version: string, tags: string[], description: string | null) =>
+    safeInvoke<SkillMeta>('update_skill_meta', { name, status, version, tags, description }),
 
   // Discovery
   discoverAgents: () => safeInvoke<DiscoveredClient[]>('discover_agents'),

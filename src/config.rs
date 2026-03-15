@@ -159,8 +159,31 @@ impl Config {
             let content = std::fs::read_to_string(&config_path)
                 .map_err(|e| RelayError::Config(format!("Failed to read config: {}", e)))?;
 
-            toml::from_str(&content)
-                .map_err(|e| RelayError::Config(format!("Failed to parse config: {}", e)))
+            let mut config: Config = toml::from_str(&content)
+                .map_err(|e| RelayError::Config(format!("Failed to parse config: {}", e)))?;
+
+            // Migrate legacy standalone chef/guest dirs to unified base_dir/chef and base_dir/cook
+            let base = Self::base_dir()?;
+            let legacy_chef = config
+                .chef_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                == Some("runwaize_skills_cookbook_chef");
+            let legacy_guest = config
+                .guest_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                == Some("runwaize_skills_cookbook_guest");
+            if legacy_chef || legacy_guest {
+                if legacy_chef {
+                    config.chef_dir = base.join("chef");
+                }
+                if legacy_guest {
+                    config.guest_dir = base.join("cook");
+                }
+                config.save()?;
+            }
+            Ok(config)
         } else {
             // Create default config
             let config = Self::default();

@@ -170,6 +170,10 @@ pub fn list_local_skills_structured(
                 name,
                 has_skill_md,
                 path,
+                status: "draft".to_string(),
+                version: "0.1.0".to_string(),
+                tags: vec![],
+                description: None,
             }
         })
         .collect())

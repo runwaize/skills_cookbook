@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, ExternalLink, Plus } from 'lucide-react';
+import { FileText, ExternalLink } from 'lucide-react';
 import { commands, type LocalSkill } from '@/lib/tauri';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { statusBadgeClass } from '@/components/MetadataPanel';
 
 export function SkillsList() {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ export function SkillsList() {
 
   useEffect(refresh, []);
 
-  const openEditor = async (name: string) => {
+  const openEditor = (name: string) => {
     navigate(`/chef/edit/${encodeURIComponent(name)}`);
   };
 
@@ -65,8 +66,26 @@ export function SkillsList() {
             <div className="flex items-center gap-3">
               <FileText className="h-5 w-5 text-primary" />
               <div>
-                <p className="font-medium">{skill.name}</p>
-                <p className="text-xs text-muted-foreground">{skill.path}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{skill.name}</p>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-1.5 py-0 ${statusBadgeClass(skill.status)}`}
+                  >
+                    {skill.status}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">v{skill.version}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {skill.description && (
+                    <p className="text-xs text-muted-foreground">{skill.description}</p>
+                  )}
+                  {skill.tags.map((tag) => (
+                    <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               </div>
               {!skill.has_skill_md && (
                 <Badge variant="destructive" className="text-xs">
