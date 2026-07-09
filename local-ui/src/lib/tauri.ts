@@ -12,6 +12,9 @@ export interface AppConfig {
   workspace_id: string | null;
   mcp_server_port: number;
   bridge_port: number;
+  managed_client_ids: string[];
+  /** Which CLI to use for AI-powered security review of imported skills ("claude_code" or "codex"); null until chosen in Settings. */
+  default_review_cli: string | null;
 }
 
 export interface RelayStatus {
@@ -36,6 +39,14 @@ export interface LocalSkill {
   version: string;
   tags: string[];
   description: string | null;
+  active: boolean;
+  targets: string[];
+  /** Provenance, e.g. "created", "downloaded", "adapted", "imported", "existing". Free-text. */
+  source: string;
+  /** RFC3339 timestamp — when this skill was first tracked (installed date). */
+  created_at: string;
+  /** RFC3339 timestamp — last metadata change. */
+  updated_at: string;
 }
 
 export interface SkillFileEntry {
@@ -52,6 +63,8 @@ export interface SkillMeta {
   version: string;
   tags: string[];
   description: string | null;
+  source: string;
+  created_at: string;
   updated_at: string;
   synced_at: string | null;
 }
@@ -82,6 +95,16 @@ export interface ScannedSkillInfo {
   path: string;
   already_in_chef: boolean;
   source_agent: string;
+  /** Repo-relative path for display (GitHub scans only) — never show `path` (an
+   *  absolute local tempdir path) directly to the user when this is present. */
+  display_path?: string | null;
+}
+
+export interface SecurityReview {
+  /** One of "safe", "concerns", "unsafe", "inconclusive". */
+  verdict: string;
+  summary: string;
+  raw_output: string;
 }
 
 export interface DiscoveredClient {
@@ -107,6 +130,26 @@ export interface AuthStatus {
   user_email: string | null;
   workspace_id: string | null;
   expires_at: string | null;
+}
+
+export interface AdoptCandidate {
+  name: string;
+  path: string;
+}
+
+export interface ProjectSkillEntry {
+  name: string;
+  targets: string[];
+}
+
+export interface UsageEvent {
+  skill: string;
+  date: string;
+  client: string;
+  /** Working directory / project folder the transcript session ran in. Empty string if unknown. */
+  context: string;
+  /** How many real invocations this one event (transcript file/session) represents. */
+  count: number;
 }
 
 // ---- Tauri detection ----
@@ -139,13 +182,17 @@ const mockConfig: AppConfig = {
   workspace_id: null,
   mcp_server_port: 9876,
   bridge_port: 9123,
+  managed_client_ids: ['claude_code', 'cursor', 'windsurf'],
+  default_review_cli: null,
 };
 
 // ---- Mock data for browser dev mode ----
 
+const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+
 const mockSkills: LocalSkill[] = [
-  { name: 'example-skill-1', has_skill_md: true, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-1`, status: 'draft', version: '0.1.0', tags: ['demo'], description: 'An example skill' },
-  { name: 'example-skill-2', has_skill_md: false, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-2`, status: 'published', version: '1.0.0', tags: [], description: null },
+  { name: 'example-skill-1', has_skill_md: true, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-1`, status: 'draft', version: '0.1.0', tags: ['demo'], description: 'An example skill that demonstrates the basic structure', active: true, targets: ['claude_code'], source: 'adapted', created_at: daysAgo(12), updated_at: daysAgo(2) },
+  { name: 'example-skill-2', has_skill_md: false, path: `${DEFAULT_SETTINGS_DIR}/chef/skills/example-skill-2`, status: 'published', version: '1.0.0', tags: [], description: null, active: false, targets: [], source: 'downloaded', created_at: daysAgo(30), updated_at: daysAgo(30) },
 ];
 
 const mockFileTree: SkillFileEntry[] = [
@@ -162,11 +209,46 @@ const mockMeta: SkillMeta = {
   version: '0.1.0',
   tags: ['demo'],
   description: 'An example skill',
-  updated_at: new Date().toISOString(),
+  source: 'created',
+  created_at: daysAgo(12),
+  updated_at: daysAgo(2),
   synced_at: null,
 };
 
 const mockManifest: GuestManifest = { skills: [] };
+
+const mockDiscoveredClients: DiscoveredClient[] = [
+  { id: 'claude_code', name: 'Claude Code', detected: true, path: '~/.claude' },
+  { id: 'codex', name: 'Codex', detected: true, path: '~/.codex' },
+  { id: 'cursor', name: 'Cursor', detected: false, path: null },
+];
+
+const dateNDaysAgo = (n: number) =>
+  new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+const REPO_A = '/Users/alp/Documents/GitRepo/RUNWAIZE/skills_cookbook';
+const REPO_B = '/Users/alp/Documents/GitRepo/RUNWAIZE/studio';
+const REPO_C = '/Users/alp/Documents/GitRepo/RUNWAIZE/www_runwaize';
+const REPO_D = '/Users/alp/Documents/GitRepo/RUNWAIZE/supervaizer';
+
+const mockUsageEvents: UsageEvent[] = [
+  { skill: 'example-skill-1', date: dateNDaysAgo(0), client: 'claude_code', context: REPO_A, count: 3 },
+  { skill: 'example-skill-1', date: dateNDaysAgo(0), client: 'codex', context: REPO_A, count: 1 },
+  { skill: 'example-skill-1', date: dateNDaysAgo(1), client: 'claude_code', context: REPO_B, count: 1 },
+  { skill: 'example-skill-1', date: dateNDaysAgo(2), client: 'claude_code', context: REPO_A, count: 1 },
+  { skill: 'example-skill-1', date: dateNDaysAgo(4), client: 'codex', context: REPO_B, count: 1 },
+  { skill: 'example-skill-1', date: dateNDaysAgo(7), client: 'claude_code', context: '', count: 1 },
+  { skill: 'example-skill-2', date: dateNDaysAgo(1), client: 'codex', context: REPO_C, count: 1 },
+  { skill: 'example-skill-2', date: dateNDaysAgo(3), client: 'claude_code', context: REPO_C, count: 1 },
+  { skill: 'example-skill-2', date: dateNDaysAgo(5), client: 'codex', context: REPO_A, count: 1 },
+  { skill: 'deploy_www', date: dateNDaysAgo(2), client: 'claude_code', context: REPO_C, count: 1 },
+  { skill: 'deploy_www', date: dateNDaysAgo(2), client: 'codex', context: REPO_C, count: 1 },
+  { skill: 'deploy_www', date: dateNDaysAgo(6), client: 'claude_code', context: REPO_C, count: 1 },
+  { skill: 'morning-routine', date: dateNDaysAgo(0), client: 'claude_code', context: REPO_D, count: 1 },
+  { skill: 'morning-routine', date: dateNDaysAgo(9), client: 'claude_code', context: REPO_A, count: 1 },
+  { skill: 'morning-routine', date: dateNDaysAgo(12), client: 'claude_code', context: REPO_D, count: 1 },
+  { skill: 'ponytail', date: dateNDaysAgo(3), client: 'codex', context: REPO_A, count: 1 },
+];
 
 const mockRelayStatus: RelayStatus = {
   connected: false,
@@ -213,6 +295,8 @@ export const commands = {
   moveSettingsDir: (newDir: string) => safeInvoke<AppConfig>('move_settings_dir', { newDir }),
   setUserRole: (role: UserRole) => safeInvoke<void>('set_user_role', { role }),
   switchUiMode: (mode: UiMode) => safeInvoke<void>('switch_ui_mode', { mode }),
+  setManagedClients: (nextIds: string[]) => safeInvoke<void>('set_managed_clients', { ids: nextIds }),
+  setDefaultReviewCli: (cli: string | null) => safeInvoke<void>('set_default_review_cli', { cli }),
 
   // Auth
   getRelayStatus: () =>
@@ -229,6 +313,27 @@ export const commands = {
       : Promise.resolve(mockSkills),
   listRemoteSkills: () => safeInvoke<RemoteSkillInfo[]>('list_remote_skills'),
   addSkill: (path: string) => safeInvoke<void>('add_skill', { path }),
+  activateSkill: (name: string) => safeInvoke<void>('activate_skill', { name }),
+  deactivateSkill: (name: string) => safeInvoke<void>('deactivate_skill', { name }),
+  deleteSkill: (name: string) => safeInvoke<void>('delete_skill', { name }),
+  setSkillTargets: (name: string, targets: string[]) =>
+    safeInvoke<void>('set_skill_targets', { name, targets }),
+  /**
+   * Publish a real copy of a skill into a chosen project repo's `.claude/skills/`
+   * and/or `.agents/skills/` so cloud/web Claude Code and Codex sessions can find it.
+   * Distinct from `setSkillTargets` (machine-global symlink deploy) — never merge these.
+   */
+  publishSkillToProject: (name: string, projectDir: string, targets: string[]) =>
+    safeInvoke<string[]>('publish_skill_to_project', { name, projectDir, targets }),
+  /** List every skill currently published into a project repo, with which target(s) each is in. */
+  listProjectSkills: (projectDir: string) =>
+    safeInvoke<ProjectSkillEntry[]>('list_project_skills', { projectDir }),
+  /** Remove a previously-published skill from a project repo for the given target(s). */
+  unpublishSkillFromProject: (projectDir: string, name: string, targets: string[]) =>
+    safeInvoke<string[]>('unpublish_skill_from_project', { projectDir, name, targets }),
+  adoptScan: (clientId: string) => safeInvoke<AdoptCandidate[]>('adopt_scan', { clientId }),
+  adoptApply: (clientId: string, names: string[]) =>
+    safeInvoke<number>('adopt_apply', { clientId, names }),
   readSkillContent: (name: string) => safeInvoke<string>('read_skill_content', { name }),
   writeSkillContent: (name: string, content: string) =>
     safeInvoke<void>('write_skill_content', { name, content }),
@@ -258,13 +363,33 @@ export const commands = {
     isTauri
       ? safeInvoke<SkillMeta>('get_skill_meta', { name })
       : Promise.resolve({ ...mockMeta, name }),
-  updateSkillMeta: (name: string, status: string, version: string, tags: string[], description: string | null) =>
-    safeInvoke<SkillMeta>('update_skill_meta', { name, status, version, tags, description }),
+  updateSkillMeta: (name: string, status: string, version: string, tags: string[], description: string | null, source: string) =>
+    safeInvoke<SkillMeta>('update_skill_meta', { name, status, version, tags, description, source }),
 
   // Discovery
-  discoverAgents: () => safeInvoke<DiscoveredClient[]>('discover_agents'),
+  discoverAgents: () =>
+    isTauri
+      ? safeInvoke<DiscoveredClient[]>('discover_agents')
+      : Promise.resolve(mockDiscoveredClients),
+  getSkillUsage: (days: number) =>
+    isTauri
+      ? safeInvoke<UsageEvent[]>('get_skill_usage', { days })
+      : Promise.resolve(
+          mockUsageEvents.filter((ev) => ev.date >= dateNDaysAgo(days - 1))
+        ),
+  resyncSkillUsage: (days: number) =>
+    isTauri
+      ? safeInvoke<UsageEvent[]>('resync_skill_usage', { days })
+      : Promise.resolve(
+          mockUsageEvents.filter((ev) => ev.date >= dateNDaysAgo(days - 1))
+        ),
   scanForSkills: (path?: string) => safeInvoke<ScannedSkillInfo[]>('scan_for_skills', { path }),
-  importSkills: (paths: string[]) => safeInvoke<number>('import_skills', { paths }),
+  importSkills: (paths: string[], names?: string[], source?: string) =>
+    safeInvoke<number>('import_skills', { paths, names, source }),
+  scanGithubRepo: (url: string) => safeInvoke<ScannedSkillInfo[]>('scan_github_repo', { url }),
+  githubRepoSlug: (url: string) => safeInvoke<string | null>('github_repo_slug', { url }),
+  runSkillSecurityReview: (skillPath: string, cli: string) =>
+    safeInvoke<SecurityReview>('run_skill_security_review', { skillPath, cli }),
 
   // Cook
   getGuestManifest: () =>

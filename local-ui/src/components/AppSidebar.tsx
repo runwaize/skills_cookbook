@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChefHat,
   UtensilsCrossed,
-  LayoutDashboard,
+  BarChart3,
   FileText,
   Cloud,
   Search,
@@ -12,6 +12,7 @@ import {
   Settings,
   BookOpen,
   ArrowDownToLine,
+  FolderGit2,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -27,7 +28,7 @@ import {
 } from '@/components/ui/sidebar';
 
 const chefNav = [
-  { label: 'Local Skills', icon: FileText, path: '/chef/skills' },
+  { label: 'Local user skills', icon: FileText, path: '/chef/skills' },
   { label: 'Remote Skills', icon: Cloud, path: '/chef/remote' },
   { label: 'Discover', icon: Search, path: '/chef/discover' },
   { label: 'Sync', icon: RefreshCw, path: '/chef/sync' },
@@ -35,6 +36,7 @@ const chefNav = [
 
 const cookNav = [
   { label: 'Local Skills', icon: BookOpen, path: '/cook/skills' },
+  { label: 'Project Skills', icon: FolderGit2, path: '/cook/project-skills' },
   { label: 'Sync', icon: ArrowDownToLine, path: '/cook/sync' },
 ];
 
@@ -62,17 +64,17 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Dashboard — top level, outside groups */}
+        {/* Usage — top level, outside groups */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={location.pathname === '/'}
-                  onClick={() => navigate('/')}
+                  isActive={location.pathname === '/chef/usage'}
+                  onClick={() => navigate('/chef/usage')}
                 >
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span>Dashboard</span>
+                  <BarChart3 className="h-4 w-4" />
+                  <span>Usage</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

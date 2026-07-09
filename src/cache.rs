@@ -239,7 +239,9 @@ pub struct CacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Artifact, ArtifactMetadata, ArtifactSignature, ArtifactType, ApprovalState};
+    use crate::types::{
+        ApprovalState, Artifact, ArtifactMetadata, ArtifactSignature, ArtifactType,
+    };
     use tempfile::TempDir;
 
     fn create_test_artifact(id: &str) -> Artifact {

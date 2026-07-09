@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FolderOpen, Globe, Save } from 'lucide-react';
+import { FolderOpen, Globe, Save, Monitor, ShieldCheck } from 'lucide-react';
 import { useRole } from '@/contexts/RoleContext';
-import { commands, isTauri } from '@/lib/tauri';
+import { commands, isTauri, type DiscoveredClient } from '@/lib/tauri';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +40,128 @@ function PathInput({
         </Button>
       </div>
     </div>
+  );
+}
+
+function ManagedClientsCard() {
+  const { config, refreshConfig } = useRole();
+  const [clients, setClients] = useState<DiscoveredClient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    commands
+      .discoverAgents()
+      .then(setClients)
+      .catch(() => setClients([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const managedIds = config?.managed_client_ids ?? [];
+
+  const toggle = async (clientId: string) => {
+    const nextIds = managedIds.includes(clientId)
+      ? managedIds.filter((id) => id !== clientId)
+      : [...managedIds, clientId];
+    setPending(clientId);
+    try {
+      await commands.setManagedClients(nextIds);
+      await refreshConfig();
+    } catch (e) {
+      console.error('Failed to update managed clients:', e);
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Monitor className="h-4 w-4" />
+          Manage LLMs / IDEs
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground -mt-1 mb-2">
+          Choose which clients you want managed here. Unmanaged clients won't appear as deploy or adopt targets,
+          even if detected on this machine.
+        </p>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading clients...</p>
+        ) : clients.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No clients found.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {clients.map((client) => (
+              <label
+                key={client.id}
+                className="flex items-center justify-between gap-3 py-1 text-sm select-none"
+              >
+                <span className="flex items-center gap-2">
+                  {client.name}
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                    {client.detected ? 'detected' : 'not installed'}
+                  </Badge>
+                </span>
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-input accent-primary"
+                  checked={managedIds.includes(client.id)}
+                  disabled={pending === client.id}
+                  onChange={() => toggle(client.id)}
+                />
+              </label>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DefaultReviewCliCard() {
+  const { config, refreshConfig } = useRole();
+  const [saving, setSaving] = useState(false);
+
+  const value = config?.default_review_cli ?? '';
+
+  const onChange = async (next: string) => {
+    setSaving(true);
+    try {
+      await commands.setDefaultReviewCli(next === '' ? null : next);
+      await refreshConfig();
+    } catch (e) {
+      console.error('Failed to update default review CLI:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4" />
+          Default Security Review CLI
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground -mt-1 mb-2">
+          Used to run an AI security review on skills imported from GitHub before installing them.
+        </p>
+        <select
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          value={value}
+          disabled={saving}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">None selected</option>
+          <option value="claude_code">Claude Code</option>
+          <option value="codex">Codex</option>
+        </select>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -94,6 +216,12 @@ export function SettingsPage() {
   };
 
   const switchToOnline = async () => {
+    const proceed = window.confirm(
+      'This replaces this view with the online Supervaize web app (requires an account) — it will ' +
+      'navigate away from this local UI.\n\nTo come back, use the Skill Cookbook icon in your system ' +
+      'tray / menu bar and choose "Local UI".\n\nContinue?'
+    );
+    if (!proceed) return;
     await commands.switchUiMode('online');
   };
 
@@ -115,6 +243,12 @@ export function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Manage LLMs / IDEs */}
+      <ManagedClientsCard />
+
+      {/* Default Security Review CLI */}
+      <DefaultReviewCliCard />
 
       {/* Directories */}
       <Card>

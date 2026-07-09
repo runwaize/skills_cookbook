@@ -61,9 +61,7 @@ impl StudioClient {
             .get("id")
             .and_then(|v| v.as_str())
             .map(String::from)
-            .ok_or_else(|| {
-                RelayError::Studio("Response missing skill id".to_string())
-            })?;
+            .ok_or_else(|| RelayError::Studio("Response missing skill id".to_string()))?;
         Ok(skill_id)
     }
 }

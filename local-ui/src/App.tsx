@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useRole } from '@/contexts/RoleContext';
 import { AppLayout } from '@/components/AppLayout';
-import { DashboardPage } from '@/pages/shared/DashboardPage';
 import { ChefDashboard } from '@/pages/chef/ChefDashboard';
 import { SkillsList } from '@/pages/chef/SkillsList';
 import { RemoteSkillsList } from '@/pages/chef/RemoteSkillsList';
@@ -10,10 +9,12 @@ import { SearchDiscover } from '@/pages/chef/SearchDiscover';
 import { SyncPage } from '@/pages/chef/SyncPage';
 import { CookDashboard } from '@/pages/cook/CookDashboard';
 import { ManifestView } from '@/pages/cook/ManifestView';
+import { ProjectSkills } from '@/pages/cook/ProjectSkills';
 import { CookSyncView } from '@/pages/cook/CookSyncView';
 import { RelayStatusPage } from '@/pages/shared/RelayStatusPage';
 import { DoctorPage } from '@/pages/shared/DoctorPage';
 import { SettingsPage } from '@/pages/shared/SettingsPage';
+import { DashboardPage } from '@/pages/shared/DashboardPage';
 
 export function App() {
   const { loading } = useRole();
@@ -30,7 +31,7 @@ export function App() {
     <Routes>
       <Route element={<AppLayout />}>
         {/* Dashboard */}
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={<Navigate to="/chef/skills" replace />} />
         {/* Chef routes */}
         <Route path="/chef" element={<ChefDashboard />} />
         <Route path="/chef/skills" element={<SkillsList />} />
@@ -38,10 +39,12 @@ export function App() {
         <Route path="/chef/edit/:name" element={<SkillEditor />} />
         <Route path="/chef/discover" element={<SearchDiscover />} />
         <Route path="/chef/sync" element={<SyncPage />} />
+        <Route path="/chef/usage" element={<DashboardPage />} />
         {/* Cook routes */}
         <Route path="/cook" element={<CookDashboard />} />
         <Route path="/cook/skills" element={<ManifestView />} />
         <Route path="/cook/manifest" element={<ManifestView />} />
+        <Route path="/cook/project-skills" element={<ProjectSkills />} />
         <Route path="/cook/sync" element={<CookSyncView />} />
         {/* Shared routes */}
         <Route path="/status" element={<RelayStatusPage />} />

@@ -9,8 +9,8 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
 use tauri::AppHandle;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::bridge::handlers::BridgeState;
 use crate::relay::RelayState;
@@ -65,16 +65,16 @@ pub async fn start_bridge_with_app(
         .route("/bridge/update/apply", post(handlers::update_apply))
         .route("/bridge/discover-apps", post(discovery::discover_apps))
         .route("/bridge/discovery/scan", post(discovery::discovery_scan))
-        .route("/bridge/discovery/import", post(discovery::discovery_import))
+        .route(
+            "/bridge/discovery/import",
+            post(discovery::discovery_import),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_bridge_auth_conditional,
         ));
 
-    let app = public
-        .merge(private)
-        .layer(cors)
-        .with_state(state);
+    let app = public.merge(private).layer(cors).with_state(state);
 
     let addr = std::net::SocketAddr::from((BRIDGE_HOST, port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -90,14 +90,14 @@ async fn require_bridge_auth_conditional(
 ) -> Result<axum::response::Response, StatusCode> {
     let path = request.uri().path();
     let is_public_path = PUBLIC_PATHS.contains(&path);
-    
+
     if is_public_path {
         if path == "/bridge/handshake" {
             state.auth.validate_origin_only(&request)?;
         }
         return Ok(next.run(request).await);
     }
-    
+
     state.auth.validate_request(&request)?;
     Ok(next.run(request).await)
 }

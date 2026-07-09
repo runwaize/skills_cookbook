@@ -17,10 +17,7 @@ pub struct InitArgs {
 pub fn run_init(args: &InitArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut config = Config::load().unwrap_or_else(|_| Config::default());
 
-    let chef_dir = args
-        .chef_dir
-        .clone()
-        .unwrap_or_else(|| default_chef_dir());
+    let chef_dir = args.chef_dir.clone().unwrap_or_else(|| default_chef_dir());
     let guest_dir = args
         .guest_dir
         .clone()

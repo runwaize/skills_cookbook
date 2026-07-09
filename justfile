@@ -192,7 +192,7 @@ ci: fmt-check lint test build-release
     @echo "✅ All CI checks passed!"
 
 # Quick validation (fast checks before commit)
-pre-commit: fmt check test
+precommit: fmt check test
     @echo "✅ Ready to commit!"
 
 # Release preparation

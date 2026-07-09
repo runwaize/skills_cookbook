@@ -8,10 +8,10 @@ import { Badge } from '@/components/ui/badge';
 const STATUS_OPTIONS = ['draft', 'review', 'published', 'archived'] as const;
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-gray-500/15 text-gray-700 border-gray-300',
-  review: 'bg-yellow-500/15 text-yellow-700 border-yellow-300',
-  published: 'bg-green-500/15 text-green-700 border-green-300',
-  archived: 'bg-red-500/15 text-red-700 border-red-300',
+  draft: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600',
+  review: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900 dark:text-yellow-200 dark:border-yellow-700',
+  published: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700',
+  archived: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900 dark:text-red-200 dark:border-red-700',
 };
 
 export function statusBadgeClass(status: string): string {
@@ -30,6 +30,7 @@ export function MetadataPanel({ skillName, meta, onMetaUpdated }: MetadataPanelP
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>(meta?.tags ?? []);
   const [description, setDescription] = useState(meta?.description ?? '');
+  const [source, setSource] = useState(meta?.source ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -38,6 +39,7 @@ export function MetadataPanel({ skillName, meta, onMetaUpdated }: MetadataPanelP
       setVersion(meta.version);
       setTags(meta.tags);
       setDescription(meta.description ?? '');
+      setSource(meta.source);
     }
   }, [meta]);
 
@@ -61,7 +63,8 @@ export function MetadataPanel({ skillName, meta, onMetaUpdated }: MetadataPanelP
         status,
         version,
         tags,
-        description || null
+        description || null,
+        source
       );
       onMetaUpdated(updated);
     } catch (e) {
@@ -76,10 +79,12 @@ export function MetadataPanel({ skillName, meta, onMetaUpdated }: MetadataPanelP
     (status !== meta.status ||
       version !== meta.version ||
       JSON.stringify(tags) !== JSON.stringify(meta.tags) ||
-      (description || '') !== (meta.description || ''));
+      (description || '') !== (meta.description || '') ||
+      source !== meta.source);
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/30 flex-wrap">
+    <div className="flex flex-col gap-2.5 p-3 rounded-md border bg-muted/30">
+      <div className="flex items-center gap-3 flex-wrap">
       {/* Status */}
       <div className="flex items-center gap-1.5">
         <span className="text-xs text-muted-foreground">Status</span>
@@ -105,6 +110,7 @@ export function MetadataPanel({ skillName, meta, onMetaUpdated }: MetadataPanelP
           onChange={(e) => setVersion(e.target.value)}
           placeholder="0.1.0"
         />
+      </div>
       </div>
 
       {/* Tags */}
@@ -133,17 +139,36 @@ export function MetadataPanel({ skillName, meta, onMetaUpdated }: MetadataPanelP
         />
       </div>
 
-      {/* Save */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-6 text-xs ml-auto"
-        disabled={!dirty || saving}
-        onClick={handleSave}
-      >
-        <Save className="h-3 w-3 mr-1" />
-        {saving ? 'Saving...' : 'Save Meta'}
-      </Button>
+      {/* Source + Save */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Source</span>
+          <Input
+            className="h-6 w-28 text-xs px-1.5"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder="source..."
+            list="skill-source-options"
+          />
+          <datalist id="skill-source-options">
+            <option value="created" />
+            <option value="downloaded" />
+            <option value="adapted" />
+            <option value="imported" />
+            <option value="existing" />
+          </datalist>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 text-xs"
+          disabled={!dirty || saving}
+          onClick={handleSave}
+        >
+          <Save className="h-3 w-3 mr-1" />
+          {saving ? 'Saving...' : 'Save Meta'}
+        </Button>
+      </div>
     </div>
   );
 }

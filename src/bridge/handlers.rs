@@ -109,11 +109,7 @@ pub async fn handshake(State(state): State<Arc<BridgeState>>) -> impl IntoRespon
 }
 
 fn handle_relay_error(error: crate::error::RelayError) -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        error.to_string(),
-    )
-        .into_response()
+    (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response()
 }
 
 pub async fn status(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
@@ -158,10 +154,7 @@ pub async fn cache_clear(State(state): State<Arc<BridgeState>>) -> impl IntoResp
 }
 
 #[allow(dead_code)]
-async fn variables_check_impl(
-    state: Arc<BridgeState>,
-    skill_id: String,
-) -> impl IntoResponse {
+async fn variables_check_impl(state: Arc<BridgeState>, skill_id: String) -> impl IntoResponse {
     let skill_id = skill_id.trim();
     if skill_id.is_empty() {
         return (
@@ -283,7 +276,7 @@ pub async fn update_status(State(state): State<Arc<BridgeState>>) -> impl IntoRe
     };
     #[cfg(not(feature = "custom-protocol"))]
     let (update_available, latest_version) = (false, None);
-    
+
     Json(UpdateStatusResponse {
         current_version: state.version.clone(),
         update_available,
@@ -302,7 +295,7 @@ async fn apply_update_internal(app: &AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to check for updates: {}", e))?
         .ok_or_else(|| "No update available".to_string())?;
-    
+
     update
         .download_and_install(|_, _| {}, || {})
         .await

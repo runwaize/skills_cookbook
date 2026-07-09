@@ -21,13 +21,34 @@ pub struct ClientDef {
 }
 
 const DISCOVERABLE_CLIENTS: &[ClientDef] = &[
-    ClientDef { id: "claude_code", name: "Claude Code" },
-    ClientDef { id: "cursor", name: "Cursor" },
-    ClientDef { id: "codex", name: "Codex" },
-    ClientDef { id: "codeium", name: "Codeium" },
-    ClientDef { id: "windsurf", name: "Windsurf" },
-    ClientDef { id: "aider", name: "Aider" },
-    ClientDef { id: "zed", name: "Zed" },
+    ClientDef {
+        id: "claude_code",
+        name: "Claude Code",
+    },
+    ClientDef {
+        id: "cursor",
+        name: "Cursor",
+    },
+    ClientDef {
+        id: "codex",
+        name: "Codex",
+    },
+    ClientDef {
+        id: "codeium",
+        name: "Codeium",
+    },
+    ClientDef {
+        id: "windsurf",
+        name: "Windsurf",
+    },
+    ClientDef {
+        id: "aider",
+        name: "Aider",
+    },
+    ClientDef {
+        id: "zed",
+        name: "Zed",
+    },
 ];
 
 #[derive(Serialize)]
@@ -90,22 +111,26 @@ fn client_paths(client_id: &str, home: &Path) -> Vec<PathBuf> {
         "cursor" => vec![
             home.join(".cursor").join("skills"),
             home.join(".cursor"),
-            home.join("Library").join("Application Support").join("Cursor"),
+            home.join("Library")
+                .join("Application Support")
+                .join("Cursor"),
         ],
         "codex" => {
             let codex_home = std::env::var("CODEX_HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| home.join(".codex"));
-            vec![codex_home.join("skills"), home.join(".codex").join("skills")]
+            vec![
+                codex_home.join("skills"),
+                home.join(".codex").join("skills"),
+            ]
         }
-        "claude_code" => vec![
-            home.join(".claude").join("plugins"),
-            home.join(".claude"),
-        ],
+        "claude_code" => vec![home.join(".claude").join("plugins"), home.join(".claude")],
         "codeium" => vec![home.join(".codeium")],
         "windsurf" => vec![
             home.join(".windsurf"),
-            home.join("Library").join("Application Support").join("Windsurf"),
+            home.join("Library")
+                .join("Application Support")
+                .join("Windsurf"),
         ],
         "aider" => vec![home.join(".aider")],
         "zed" => vec![home.join(".zed")],
@@ -196,7 +221,11 @@ pub fn scan_path_impl(path: &Path, client_id: &str, depth: u32) -> Result<Vec<Sc
     }
     let mut skills = Vec::new();
     let entries = std::fs::read_dir(path).map_err(|e| {
-        RelayError::Discovery(format!("Failed to read directory {}: {}", path.display(), e))
+        RelayError::Discovery(format!(
+            "Failed to read directory {}: {}",
+            path.display(),
+            e
+        ))
     })?;
     for entry in entries {
         let entry = entry.map_err(|e| RelayError::Discovery(e.to_string()))?;
@@ -204,8 +233,9 @@ pub fn scan_path_impl(path: &Path, client_id: &str, depth: u32) -> Result<Vec<Sc
         if p.is_dir() {
             skills.extend(scan_path_impl(&p, client_id, depth + 1)?);
         } else if p.file_name().map(|n| n == "SKILL.md").unwrap_or(false) {
-            let content = std::fs::read_to_string(&p)
-                .map_err(|e| RelayError::Discovery(format!("Failed to read {}: {}", p.display(), e)))?;
+            let content = std::fs::read_to_string(&p).map_err(|e| {
+                RelayError::Discovery(format!("Failed to read {}: {}", p.display(), e))
+            })?;
             let (meta, _) = extract_frontmatter(&content);
             let name = derive_skill_name(&meta, &p);
             let identifier = derive_identifier(&p);
@@ -242,7 +272,10 @@ pub fn resolve_skill_md_path(path: &str) -> Result<PathBuf> {
             path
         )));
     }
-    Err(RelayError::Discovery(format!("Path does not exist: {}", path)))
+    Err(RelayError::Discovery(format!(
+        "Path does not exist: {}",
+        path
+    )))
 }
 
 /// Build a zip containing SKILL.md for studio ingestion.
@@ -261,7 +294,8 @@ pub fn build_skill_zip(skill_md_path: &Path) -> Result<Vec<u8>> {
             .map_err(|e| RelayError::Discovery(format!("Zip error: {}", e)))?;
         zip.write_all(content.as_bytes())
             .map_err(|e| RelayError::Discovery(format!("Zip write error: {}", e)))?;
-        zip.finish().map_err(|e| RelayError::Discovery(format!("Zip finish error: {}", e)))?;
+        zip.finish()
+            .map_err(|e| RelayError::Discovery(format!("Zip finish error: {}", e)))?;
     }
     Ok(buf)
 }

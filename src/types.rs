@@ -269,6 +269,17 @@ pub struct LocalSkill {
     pub version: String,
     pub tags: Vec<String>,
     pub description: Option<String>,
+    /// True if the skill lives under skills/ (deployable); false if skills-inactive/.
+    pub active: bool,
+    /// Client ids this skill is currently symlinked into.
+    pub targets: Vec<String>,
+    /// Provenance, e.g. "created", "downloaded", "adapted", "imported", "existing".
+    /// Free-text — editable, not a rigid enum.
+    pub source: String,
+    /// RFC3339 timestamp of when this skill was first tracked (installed date).
+    pub created_at: String,
+    /// RFC3339 timestamp of the last metadata change (last changed date).
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -318,6 +329,12 @@ pub struct ScannedSkillInfo {
     pub path: String,
     pub already_in_chef: bool,
     pub source_agent: String,
+    /// Human-friendly, repo-relative path for display (e.g. "skills/foo/SKILL.md").
+    /// `None` for local-folder scans, where `path` is already meaningful on its own.
+    /// GitHub scans set this so the UI never has to show the raw absolute tempdir
+    /// path (e.g. "/var/folders/.../T/.tmpXXXX/SKILL.md") to the user.
+    #[serde(default)]
+    pub display_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -330,6 +347,10 @@ pub struct AppConfig {
     pub workspace_id: Option<String>,
     pub mcp_server_port: u16,
     pub bridge_port: u16,
+    pub managed_client_ids: Vec<String>,
+    /// Which CLI to use for AI-powered security review of imported skills
+    /// (`"claude_code"` or `"codex"`); `None` until chosen in Settings.
+    pub default_review_cli: Option<String>,
 }
 
 // ===== Token Types =====

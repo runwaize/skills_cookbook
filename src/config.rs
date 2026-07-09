@@ -53,6 +53,24 @@ pub struct Config {
     /// Selected workspace ID when user has multiple. CLI.
     #[serde(default)]
     pub workspace_id: Option<String>,
+
+    /// Which of `skill_ops::TARGET_CLIENT_IDS` the user has chosen to manage
+    /// skills for. Defaults to all known clients so existing users see no
+    /// behavior change until they actively narrow it down in Settings.
+    #[serde(default = "default_managed_client_ids")]
+    pub managed_client_ids: Vec<String>,
+
+    /// Which CLI to use for AI-powered security review of imported skills
+    /// (`"claude_code"` or `"codex"`). `None` until the user picks one in Settings.
+    #[serde(default)]
+    pub default_review_cli: Option<String>,
+}
+
+fn default_managed_client_ids() -> Vec<String> {
+    crate::skill_ops::TARGET_CLIENT_IDS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn default_bridge_port() -> u16 {
@@ -146,6 +164,8 @@ impl Default for Config {
             chef_dir: default_chef_dir(),
             guest_dir: default_guest_dir(),
             workspace_id: None,
+            managed_client_ids: default_managed_client_ids(),
+            default_review_cli: None,
         }
     }
 }
@@ -164,15 +184,9 @@ impl Config {
 
             // Migrate legacy standalone chef/guest dirs to unified base_dir/chef and base_dir/cook
             let base = Self::base_dir()?;
-            let legacy_chef = config
-                .chef_dir
-                .file_name()
-                .and_then(|n| n.to_str())
+            let legacy_chef = config.chef_dir.file_name().and_then(|n| n.to_str())
                 == Some("runwaize_skills_cookbook_chef");
-            let legacy_guest = config
-                .guest_dir
-                .file_name()
-                .and_then(|n| n.to_str())
+            let legacy_guest = config.guest_dir.file_name().and_then(|n| n.to_str())
                 == Some("runwaize_skills_cookbook_guest");
             if legacy_chef || legacy_guest {
                 if legacy_chef {
@@ -280,8 +294,7 @@ impl Config {
     /// Used on Windows/Linux; macOS 14+ uses data_store_identifier instead.
     #[cfg_attr(not(any(target_os = "windows", target_os = "linux")), allow(dead_code))]
     pub fn webview_data_dir() -> Result<PathBuf> {
-        let dir = Self::base_dir()?
-            .join("webview");
+        let dir = Self::base_dir()?.join("webview");
         std::fs::create_dir_all(&dir)
             .map_err(|e| RelayError::Config(format!("Failed to create webview dir: {}", e)))?;
         Ok(dir)

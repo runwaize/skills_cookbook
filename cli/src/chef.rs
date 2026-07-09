@@ -5,7 +5,6 @@ use skill_cookbook_relay::discovery::{build_skill_zip, resolve_skill_md_path, sc
 use skill_cookbook_relay::{auth::AuthManager, rss_client::RssClient, studio_client::StudioClient};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::io;
 
 #[derive(clap::Args, Debug)]
 pub struct AddArgs {
@@ -39,13 +38,13 @@ pub fn run_add(args: &AddArgs) -> Result<(), Box<dyn std::error::Error + Send + 
         .unwrap_or("skill")
         .to_string();
     let dest_dir = config.chef_dir.join("skills").join(&skill_name);
-    std::fs::create_dir_all(&dest_dir).map_err(|e| format!("create dest dir: {}", e))?;
-    let dest_path = dest_dir.join("SKILL.md");
-    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| e.to_string())?;
-    std::fs::write(&dest_path, content).map_err(|e| format!("write: {}", e))?;
+    let src_dir = skill_md_path
+        .parent()
+        .ok_or_else(|| format!("Invalid skill path: {}", skill_md_path.display()))?;
+    skill_cookbook_relay::skill_ops::copy_dir_all(src_dir, &dest_dir).map_err(|e| e.to_string())?;
 
     git_add_commit(&config.chef_dir, &format!("Add skill: {}", skill_name))?;
-    println!("Added skill '{}' at {}", skill_name, dest_path.display());
+    println!("Added skill '{}' at {}", skill_name, dest_dir.display());
     Ok(())
 }
 
@@ -57,7 +56,10 @@ pub struct SyncArgs {
 }
 
 #[derive(clap::Args, Debug)]
-pub struct DeployClaudeArgs {}
+pub struct DeployArgs {
+    /// Target client id: claude_code, cursor, codex, codeium, windsurf, aider, zed.
+    pub target: String,
+}
 
 #[derive(clap::Args, Debug)]
 pub struct DeactivateArgs {
@@ -65,122 +67,254 @@ pub struct DeactivateArgs {
     pub skill_name: String,
 }
 
-/// Deploy chef skills to ~/.claude/skills by symlinking each skill dir (folder containing SKILL.md).
-pub fn run_deploy_claude(_args: &DeployClaudeArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+#[derive(clap::Args, Debug)]
+pub struct ActivateArgs {
+    /// Skill name (folder name under skills-inactive/).
+    pub name: String,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct DeleteArgs {
+    /// Skill name (folder name under skills/ or skills-inactive/).
+    pub name: String,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct AdoptArgs {
+    /// Client id to scan: claude_code, cursor, codex, codeium, windsurf, aider, zed.
+    pub target: String,
+    /// Actually move+relink candidates instead of just listing them.
+    #[arg(long)]
+    pub apply: bool,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct PublishArgs {
+    /// Skill name (folder name or deploy link name, e.g. "foo" or "group-foo").
+    pub name: String,
+    /// Path to the target project's repo (or any dir inside it).
+    pub project_dir: PathBuf,
+    /// Publish to <project_dir>/.claude/skills/<name>.
+    #[arg(long = "claude-code")]
+    pub claude_code: bool,
+    /// Publish to <project_dir>/.agents/skills/<name>.
+    #[arg(long)]
+    pub codex: bool,
+}
+
+/// Deploy every active chef skill to a target client (symlink into its skills dir),
+/// preserving any targets it's already deployed to.
+pub fn run_deploy(args: &DeployArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Config::load().map_err(|e| e.to_string())?;
     let chef_skills_dir = config.chef_dir.join("skills");
     if !chef_skills_dir.exists() {
-        return Err(format!("Chef skills dir does not exist: {}", chef_skills_dir.display()).into());
+        return Err(format!(
+            "Chef skills dir does not exist: {}",
+            chef_skills_dir.display()
+        )
+        .into());
+    }
+    if !skill_cookbook_relay::skill_ops::TARGET_CLIENT_IDS.contains(&args.target.as_str()) {
+        return Err(format!(
+            "Unknown target '{}'. Valid targets: {}",
+            args.target,
+            skill_cookbook_relay::skill_ops::TARGET_CLIENT_IDS.join(", ")
+        )
+        .into());
     }
 
-    let claude_skills_dir = dirs::home_dir()
-        .ok_or_else(|| "Could not determine home dir".to_string())?
-        .join(".claude")
-        .join("skills");
-    std::fs::create_dir_all(&claude_skills_dir).map_err(|e| format!("create {}: {}", claude_skills_dir.display(), e))?;
-
-    let skills = scan_path_impl(&chef_skills_dir, "claude", 0).map_err(|e| e.to_string())?;
+    let skills = scan_path_impl(&chef_skills_dir, "chef", 0).map_err(|e| e.to_string())?;
     if skills.is_empty() {
-        println!("No skills found in {}. Nothing to deploy.", chef_skills_dir.display());
+        println!(
+            "No skills found in {}. Nothing to deploy.",
+            chef_skills_dir.display()
+        );
         return Ok(());
     }
 
     let mut linked = 0;
     for s in &skills {
-        // s.path is the path to SKILL.md; skill dir is its parent.
         let skill_md_path = Path::new(&s.path);
-        let skill_dir = skill_md_path.parent().ok_or_else(|| format!("Invalid skill path: {}", s.path))?;
-        let link_name = link_name_for_skill_dir(skill_dir, &chef_skills_dir);
-        let link_path = claude_skills_dir.join(&link_name);
-
-        if link_path.exists() {
-            std::fs::remove_file(&link_path).or_else(|e| {
-                if link_path.is_dir() {
-                    std::fs::remove_dir_all(&link_path)
-                } else {
-                    Err(e)
-                }
-            }).map_err(|e| format!("remove existing {:?}: {}", link_path, e))?;
+        let skill_dir = skill_md_path
+            .parent()
+            .ok_or_else(|| format!("Invalid skill path: {}", s.path))?;
+        let mut current =
+            skill_cookbook_relay::skill_ops::deployed_targets(skill_dir, &chef_skills_dir);
+        if !current.iter().any(|t| t == &args.target) {
+            current.push(args.target.clone());
         }
-
-        symlink_dir(skill_dir, &link_path).map_err(|e| format!("symlink {} -> {}: {}", skill_dir.display(), link_path.display(), e))?;
-        println!("  {} -> {}", link_name, skill_dir.display());
+        skill_cookbook_relay::skill_ops::set_skill_targets(skill_dir, &chef_skills_dir, &current)
+            .map_err(|e| e.to_string())?;
+        println!("  {} -> {}", s.name, args.target);
         linked += 1;
     }
-    println!("Deployed {} skill(s) to {}.", linked, claude_skills_dir.display());
+    println!("Deployed {} skill(s) to {}.", linked, args.target);
     Ok(())
 }
 
-/// Unique link name: relative path from chef_skills_dir with path separators replaced by "-".
-fn link_name_for_skill_dir(skill_dir: &Path, chef_skills_dir: &Path) -> String {
-    let relative = skill_dir
-        .strip_prefix(chef_skills_dir)
-        .unwrap_or(skill_dir);
-    let s = relative.to_string_lossy();
-    let sep = std::path::MAIN_SEPARATOR;
-    s.replace(sep, "-")
-}
-
-#[cfg(unix)]
-fn symlink_dir(src: &Path, dst: &Path) -> io::Result<()> {
-    std::os::unix::fs::symlink(src, dst)
-}
-
-#[cfg(windows)]
-fn symlink_dir(src: &Path, dst: &Path) -> io::Result<()> {
-    std::os::windows::fs::symlink_dir(src, dst)
-}
-
-/// Move skill to chef/skills-inactive; remove ~/.claude/skills link if present.
-pub fn run_deactivate(args: &DeactivateArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// Move skill to chef/skills-inactive, stripping all deployed symlinks first.
+pub fn run_deactivate(
+    args: &DeactivateArgs,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Config::load().map_err(|e| e.to_string())?;
     let chef_skills_dir = config.chef_dir.join("skills");
-    let skills_inactive_dir = config.chef_dir.join("skills-inactive");
-
     if !chef_skills_dir.exists() {
-        return Err(format!("Chef skills dir does not exist: {}", chef_skills_dir.display()).into());
+        return Err(format!(
+            "Chef skills dir does not exist: {}",
+            chef_skills_dir.display()
+        )
+        .into());
     }
 
-    let skill_dir = find_skill_dir_by_name(&chef_skills_dir, &args.skill_name)
-        .ok_or_else(|| format!("Skill '{}' not found in {}", args.skill_name, chef_skills_dir.display()))?;
+    let skill_dir =
+        find_skill_dir_by_name(&chef_skills_dir, &args.skill_name).ok_or_else(|| {
+            format!(
+                "Skill '{}' not found in {}",
+                args.skill_name,
+                chef_skills_dir.display()
+            )
+        })?;
+    let resolved_name = skill_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("Invalid skill dir: {}", skill_dir.display()))?
+        .to_string();
 
-    let link_name = link_name_for_skill_dir(&skill_dir, &chef_skills_dir);
-    let relative = skill_dir
-        .strip_prefix(&chef_skills_dir)
-        .map_err(|_| format!("Skill path not under chef skills: {}", skill_dir.display()))?;
-    let dest = skills_inactive_dir.join(relative);
-
-    if dest.exists() {
-        return Err(format!("Destination already exists: {}. Remove or rename it first.", dest.display()).into());
-    }
-
-    std::fs::create_dir_all(dest.parent().unwrap_or(&skills_inactive_dir))
-        .map_err(|e| format!("create skills-inactive parent: {}", e))?;
-    std::fs::rename(&skill_dir, &dest).map_err(|e| format!("move {} to {}: {}", skill_dir.display(), dest.display(), e))?;
+    let dest = skill_cookbook_relay::skill_ops::deactivate_skill(&config.chef_dir, &resolved_name)
+        .map_err(|e| e.to_string())?;
     println!("Moved {} -> {}", skill_dir.display(), dest.display());
+    Ok(())
+}
 
-    let mut removed_from_claude = false;
-    if let Some(home) = dirs::home_dir() {
-        let claude_skills_dir = home.join(".claude").join("skills");
-        let link_path = claude_skills_dir.join(&link_name);
-        if link_path.exists() {
-            std::fs::remove_file(&link_path).or_else(|e| {
-                if link_path.is_dir() {
-                    std::fs::remove_dir_all(&link_path)
-                } else {
-                    Err(e)
-                }
-            }).map_err(|e| format!("remove Claude link {}: {}", link_path.display(), e))?;
-            println!("Removed Claude link: {}", link_path.display());
-            removed_from_claude = true;
+/// Activate a skill: move it from skills-inactive to skills.
+pub fn run_activate(args: &ActivateArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = Config::load().map_err(|e| e.to_string())?;
+    let dest = skill_cookbook_relay::skill_ops::activate_skill(&config.chef_dir, &args.name)
+        .map_err(|e| e.to_string())?;
+    println!("Activated '{}' at {}", args.name, dest.display());
+    Ok(())
+}
+
+/// Delete a skill (from skills/ or skills-inactive/), stripping deployed symlinks first.
+pub fn run_delete(args: &DeleteArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = Config::load().map_err(|e| e.to_string())?;
+    skill_cookbook_relay::skill_ops::delete_skill(&config.chef_dir, &args.name)
+        .map_err(|e| e.to_string())?;
+    println!("Deleted skill '{}'.", args.name);
+    Ok(())
+}
+
+/// Scan (and optionally adopt) skills that already live inside a client's skills dir.
+pub fn run_adopt(args: &AdoptArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = Config::load().map_err(|e| e.to_string())?;
+    if !skill_cookbook_relay::skill_ops::TARGET_CLIENT_IDS.contains(&args.target.as_str()) {
+        return Err(format!(
+            "Unknown target '{}'. Valid targets: {}",
+            args.target,
+            skill_cookbook_relay::skill_ops::TARGET_CLIENT_IDS.join(", ")
+        )
+        .into());
+    }
+
+    let candidates =
+        skill_cookbook_relay::skill_ops::adopt_scan(&args.target).map_err(|e| e.to_string())?;
+    if candidates.is_empty() {
+        println!("No adoptable skills found for '{}'.", args.target);
+        return Ok(());
+    }
+
+    if !args.apply {
+        println!(
+            "Candidates in {} (dry run, use --apply to adopt):",
+            args.target
+        );
+        for c in &candidates {
+            println!("  {} ({})", c.name, c.path);
+        }
+        return Ok(());
+    }
+
+    let names: Vec<String> = candidates.iter().map(|c| c.name.clone()).collect();
+    let adopted =
+        skill_cookbook_relay::skill_ops::adopt_apply(&config.chef_dir, &args.target, &names)
+            .map_err(|e| e.to_string())?;
+    if adopted.is_empty() {
+        println!("Nothing adopted (all candidates already exist in chef).");
+    } else {
+        println!("Adopted {} skill(s) from {}:", adopted.len(), args.target);
+        for name in &adopted {
+            println!("  {}", name);
         }
     }
+    Ok(())
+}
 
-    if removed_from_claude {
-        println!();
-        println!("Reminder: restart your Claude Code (or other Claude) instances so they stop using the deactivated skill.");
+/// Publish a skill as a real (non-symlink) copy into a target project repo's
+/// `.claude/skills/` and/or `.agents/skills/`, so cloud/web-hosted Claude Code and
+/// Codex sessions (which only see what's checked into the repo they clone) can use it.
+/// If neither --claude-code nor --codex is given, publishes to both (the feature's
+/// whole point is "make available everywhere").
+pub fn run_publish(args: &PublishArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = Config::load().map_err(|e| e.to_string())?;
+    let chef_skills_dir = config.chef_dir.join("skills");
+
+    let skill_dir = find_skill_dir_by_name(&chef_skills_dir, &args.name)
+        .or_else(|| {
+            let inactive_dir = config.chef_dir.join("skills-inactive");
+            find_skill_dir_by_name(&inactive_dir, &args.name)
+        })
+        .ok_or_else(|| {
+            format!(
+                "Skill '{}' not found in skills or skills-inactive",
+                args.name
+            )
+        })?;
+
+    let publish_ids = skill_cookbook_relay::skill_ops::PROJECT_PUBLISH_TARGET_IDS;
+    let mut targets: Vec<String> = Vec::new();
+    if args.claude_code {
+        targets.push("claude_code_project".to_string());
+    }
+    if args.codex {
+        targets.push("codex_project".to_string());
+    }
+    if targets.is_empty() {
+        targets = publish_ids.iter().map(|s| s.to_string()).collect();
     }
 
+    let written = skill_cookbook_relay::skill_ops::publish_skill_to_project(
+        &skill_dir,
+        &args.project_dir,
+        &targets,
+    )
+    .map_err(|e| e.to_string())?;
+
+    if written.is_empty() {
+        println!("Nothing published (no recognized targets).");
+    } else {
+        println!("Published '{}' to:", args.name);
+        for t in &written {
+            match t.as_str() {
+                "claude_code_project" => println!(
+                    "  {}",
+                    args.project_dir
+                        .join(".claude")
+                        .join("skills")
+                        .join(&args.name)
+                        .display()
+                ),
+                "codex_project" => println!(
+                    "  {}",
+                    args.project_dir
+                        .join(".agents")
+                        .join("skills")
+                        .join(&args.name)
+                        .display()
+                ),
+                other => println!("  ({})", other),
+            }
+        }
+    }
     Ok(())
 }
 
@@ -190,11 +324,13 @@ fn find_skill_dir_by_name(chef_skills_dir: &Path, skill_name: &str) -> Option<Pa
     if direct.is_dir() && direct.join("SKILL.md").exists() {
         return Some(direct);
     }
-    let skills = scan_path_impl(chef_skills_dir, "claude", 0).ok()?;
+    let skills = scan_path_impl(chef_skills_dir, "chef", 0).ok()?;
     for s in skills {
         let skill_md_path = Path::new(&s.path);
         let skill_dir = skill_md_path.parent()?;
-        if link_name_for_skill_dir(skill_dir, chef_skills_dir) == skill_name {
+        if skill_cookbook_relay::skill_ops::link_name_for_skill_dir(skill_dir, chef_skills_dir)
+            == skill_name
+        {
             return Some(skill_dir.to_path_buf());
         }
     }
@@ -202,9 +338,7 @@ fn find_skill_dir_by_name(chef_skills_dir: &Path, skill_name: &str) -> Option<Pa
 }
 
 /// Sync chef: commit local, optionally push to server.
-pub fn run_sync_chef(
-    args: &SyncArgs,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_sync_chef(args: &SyncArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Config::load().map_err(|e| e.to_string())?;
 
     git_add_commit(&config.chef_dir, "Sync chef")?;
@@ -215,7 +349,9 @@ pub fn run_sync_chef(
     Ok(())
 }
 
-fn push_local_skills_to_server(config: &Config) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn push_local_skills_to_server(
+    config: &Config,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let skills_dir = config.chef_dir.join("skills");
     if !skills_dir.exists() {
         return Ok(());
@@ -238,12 +374,10 @@ fn push_local_skills_to_server(config: &Config) -> Result<(), Box<dyn std::error
         for s in &skills {
             let path = std::path::Path::new(&s.path);
             match build_skill_zip(path) {
-                Ok(zip_bytes) => {
-                    match studio.upload_skill(&token, zip_bytes).await {
-                        Ok(skill_id) => println!("Pushed {} -> {}", s.name, skill_id),
-                        Err(e) => eprintln!("Failed to push {}: {}", s.name, e),
-                    }
-                }
+                Ok(zip_bytes) => match studio.upload_skill(&token, zip_bytes).await {
+                    Ok(skill_id) => println!("Pushed {} -> {}", s.name, skill_id),
+                    Err(e) => eprintln!("Failed to push {}: {}", s.name, e),
+                },
                 Err(e) => eprintln!("Failed to build zip for {}: {}", s.path, e),
             }
         }
@@ -305,13 +439,17 @@ pub fn run_edit(args: &EditArgs) -> Result<(), Box<dyn std::error::Error + Send 
 /// Structured list of local skills (for Tauri UI).
 pub fn list_local_skills_structured(
     config: &Config,
-) -> Result<Vec<skill_cookbook_relay::types::LocalSkill>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<skill_cookbook_relay::types::LocalSkill>, Box<dyn std::error::Error + Send + Sync>>
+{
     let skills_dir = config.chef_dir.join("skills");
     let entries = list_local_skills(&skills_dir)?;
     Ok(entries
         .into_iter()
         .map(|(name, has_skill_md)| {
-            let path = skills_dir.join(&name).to_string_lossy().to_string();
+            let skill_path = skills_dir.join(&name);
+            let targets =
+                skill_cookbook_relay::skill_ops::deployed_targets(&skill_path, &skills_dir);
+            let path = skill_path.to_string_lossy().to_string();
             skill_cookbook_relay::types::LocalSkill {
                 name,
                 has_skill_md,
@@ -320,6 +458,11 @@ pub fn list_local_skills_structured(
                 version: "0.1.0".to_string(),
                 tags: vec![],
                 description: None,
+                active: true,
+                targets,
+                source: String::new(),
+                created_at: String::new(),
+                updated_at: String::new(),
             }
         })
         .collect())
@@ -328,7 +471,10 @@ pub fn list_local_skills_structured(
 /// Structured list of remote skills (for Tauri UI).
 pub fn list_remote_skills_structured(
     config: &Config,
-) -> Result<Vec<skill_cookbook_relay::types::RemoteSkillInfo>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    Vec<skill_cookbook_relay::types::RemoteSkillInfo>,
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
     rt.block_on(async {
         let auth = Arc::new(AuthManager::new(config.clone()).map_err(|e| e.to_string())?);
@@ -340,7 +486,10 @@ pub fn list_remote_skills_structured(
         let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
         let mut result = Vec::new();
         for lib in &libraries {
-            let skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            let skills = rss
+                .list_skills(&lib.library_id)
+                .await
+                .map_err(|e| e.to_string())?;
             for s in skills {
                 result.push(skill_cookbook_relay::types::RemoteSkillInfo {
                     library_name: lib.name.clone(),
@@ -360,7 +509,8 @@ pub fn add_skill_to_chef(
     config: &Config,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let skill_md_path = skill_cookbook_relay::discovery::resolve_skill_md_path(path).map_err(|e| e.to_string())?;
+    let skill_md_path =
+        skill_cookbook_relay::discovery::resolve_skill_md_path(path).map_err(|e| e.to_string())?;
     let skill_name = skill_md_path
         .parent()
         .and_then(|p| p.file_name())
@@ -368,10 +518,10 @@ pub fn add_skill_to_chef(
         .unwrap_or("skill")
         .to_string();
     let dest_dir = config.chef_dir.join("skills").join(&skill_name);
-    std::fs::create_dir_all(&dest_dir).map_err(|e| format!("create dest dir: {}", e))?;
-    let dest_path = dest_dir.join("SKILL.md");
-    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| e.to_string())?;
-    std::fs::write(&dest_path, content).map_err(|e| format!("write: {}", e))?;
+    let src_dir = skill_md_path
+        .parent()
+        .ok_or_else(|| format!("Invalid skill path: {}", skill_md_path.display()))?;
+    skill_cookbook_relay::skill_ops::copy_dir_all(src_dir, &dest_dir).map_err(|e| e.to_string())?;
     git_add_commit(&config.chef_dir, &format!("Add skill: {}", skill_name))?;
     Ok(())
 }
@@ -410,7 +560,9 @@ fn git_has_changes(repo_root: &Path) -> Result<bool, Box<dyn std::error::Error +
     Ok(!output.stdout.is_empty())
 }
 
-fn push_local_skills_count(config: &Config) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+fn push_local_skills_count(
+    config: &Config,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     let skills_dir = config.chef_dir.join("skills");
     if !skills_dir.exists() {
         return Ok(0);
@@ -514,7 +666,10 @@ fn run_list_remote() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
         for lib in &libraries {
             println!("Library: {} ({})", lib.name, lib.library_id);
-            let skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            let skills = rss
+                .list_skills(&lib.library_id)
+                .await
+                .map_err(|e| e.to_string())?;
             for s in skills {
                 println!("  - {} ({})", s.name, s.skill_id);
             }
@@ -523,7 +678,10 @@ fn run_list_remote() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     })
 }
 
-pub(crate) fn git_add_commit(repo_root: &Path, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub(crate) fn git_add_commit(
+    repo_root: &Path,
+    message: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _ = std::process::Command::new("git")
         .args(["add", "-A"])
         .current_dir(repo_root)

@@ -100,7 +100,12 @@ fn build_commit_message(added: &[String]) -> String {
         n if n <= 5 => format!("Add {} skills: {}", n, added.join(", ")),
         n => {
             let shown: Vec<_> = added.iter().take(5).map(|s| s.as_str()).collect();
-            format!("Add {} skills: {}, ...and {} more", n, shown.join(", "), n - 5)
+            format!(
+                "Add {} skills: {}, ...and {} more",
+                n,
+                shown.join(", "),
+                n - 5
+            )
         }
     }
 }
@@ -117,7 +122,10 @@ fn dedup_by_name(skills: Vec<ScannedSkill>) -> Vec<ScannedSkill> {
 pub fn scan_for_skills_structured(
     config: &Config,
     path: Option<&str>,
-) -> Result<Vec<skill_cookbook_relay::types::ScannedSkillInfo>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    Vec<skill_cookbook_relay::types::ScannedSkillInfo>,
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     let skills = if let Some(p) = path {
         let dir = std::path::Path::new(p);
         if !dir.is_dir() {
@@ -138,6 +146,7 @@ pub fn scan_for_skills_structured(
             path: s.path.clone(),
             already_in_chef: existing.contains(&s.name),
             source_agent: s.client_id,
+            display_path: None,
         })
         .collect())
 }
@@ -182,11 +191,7 @@ pub fn scan_agent_folders() -> Result<Vec<ScannedSkill>, Box<dyn std::error::Err
 
     println!("Detected agents:");
     for c in &detected {
-        println!(
-            "  {} ({})",
-            c.name,
-            c.path.as_deref().unwrap_or("unknown")
-        );
+        println!("  {} ({})", c.name, c.path.as_deref().unwrap_or("unknown"));
     }
     println!();
 
@@ -237,9 +242,7 @@ fn copy_dir_recursive(
     dst: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     std::fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {}", dst.display(), e))?;
-    for entry in
-        std::fs::read_dir(src).map_err(|e| format!("read dir {}: {}", src.display(), e))?
-    {
+    for entry in std::fs::read_dir(src).map_err(|e| format!("read dir {}: {}", src.display(), e))? {
         let entry = entry.map_err(|e| e.to_string())?;
         let ft = entry
             .file_type()
@@ -320,7 +323,10 @@ mod tests {
         copy_dir_recursive(&src, &dst).unwrap();
 
         assert!(dst.join("SKILL.md").exists());
-        assert_eq!(fs::read_to_string(dst.join("SKILL.md")).unwrap(), "# test skill");
+        assert_eq!(
+            fs::read_to_string(dst.join("SKILL.md")).unwrap(),
+            "# test skill"
+        );
         assert!(dst.join("sub").join("helper.md").exists());
         assert_eq!(
             fs::read_to_string(dst.join("sub").join("helper.md")).unwrap(),
@@ -392,10 +398,7 @@ mod tests {
 
     #[test]
     fn build_commit_message_single() {
-        assert_eq!(
-            build_commit_message(&["foo".into()]),
-            "Add skill: foo"
-        );
+        assert_eq!(build_commit_message(&["foo".into()]), "Add skill: foo");
     }
 
     #[test]

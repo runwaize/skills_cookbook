@@ -146,4 +146,3 @@ fn parse_pem_public_key(pem: &str) -> Result<Vec<u8>> {
         .decode(&pem_data)
         .map_err(|e| RelayError::InvalidSignature(format!("Invalid PEM encoding: {}", e)))
 }
-

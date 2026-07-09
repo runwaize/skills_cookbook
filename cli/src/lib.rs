@@ -13,9 +13,9 @@ mod workspace;
 mod cli_tests;
 
 use clap::Parser;
+use skill_cookbook_relay::auth::AuthManager;
 use std::process::ExitCode;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use skill_cookbook_relay::auth::AuthManager;
 
 /// Runwaize Skills Cookbook CLI — chef/guest skills, sync, install, doctor.
 #[derive(Parser, Debug)]
@@ -71,19 +71,19 @@ pub enum ChefSub {
     Sync(chef::SyncArgs),
     /// Search for SKILL.md files and add selected ones to chef.
     Search(search::SearchArgs),
-    /// Deploy chef skills to a target (e.g. Claude Code).
-    Deploy {
-        #[command(subcommand)]
-        sub: DeploySub,
-    },
-    /// Move skill to skills-inactive and remove Claude deploy link if present.
+    /// Deploy chef skills to a target client (symlink into its skills dir).
+    Deploy(chef::DeployArgs),
+    /// Move skill to skills-inactive, removing all deployed symlinks first.
     Deactivate(chef::DeactivateArgs),
-}
-
-#[derive(clap::Subcommand, Debug)]
-pub enum DeploySub {
-    /// Symlink chef skills into ~/.claude/skills (skill dir = folder containing SKILL.md).
-    Claude(chef::DeployClaudeArgs),
+    /// Move skill from skills-inactive back to skills.
+    Activate(chef::ActivateArgs),
+    /// Delete a skill (from skills/ or skills-inactive/), removing deployed symlinks first.
+    Delete(chef::DeleteArgs),
+    /// Scan (and optionally adopt) skills that already live in a client's skills dir.
+    Adopt(chef::AdoptArgs),
+    /// Publish a real (non-symlink) copy of a skill into a project repo's
+    /// .claude/skills/ and/or .agents/skills/, for cloud/web Claude Code and Codex.
+    Publish(chef::PublishArgs),
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -146,10 +146,12 @@ fn run_command(cli: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>
             ChefSub::Add(args) => chef::run_add(args),
             ChefSub::Sync(args) => run_sync(args),
             ChefSub::Search(args) => search::run_search(args),
-            ChefSub::Deploy { sub } => match sub {
-                DeploySub::Claude(args) => chef::run_deploy_claude(args),
-            },
+            ChefSub::Deploy(args) => chef::run_deploy(args),
             ChefSub::Deactivate(args) => chef::run_deactivate(args),
+            ChefSub::Activate(args) => chef::run_activate(args),
+            ChefSub::Delete(args) => chef::run_delete(args),
+            ChefSub::Adopt(args) => chef::run_adopt(args),
+            ChefSub::Publish(args) => chef::run_publish(args),
         },
         Command::Skill { sub } => match sub {
             SkillSub::Status(args) => library::run_skill_status(args),
@@ -192,8 +194,21 @@ fn print_help() {
     println!("    chef add <path>        Add skill to chef dir");
     println!("    chef sync [--no-push]  Sync chef and guest");
     println!("    chef search [path]     Scan for skills and add selected to chef");
-    println!("    chef deploy claude     Symlink chef skills into ~/.claude/skills");
-    println!("    chef deactivate <name> Move skill to skills-inactive, remove Claude link");
+    println!("    chef deploy <target>   Symlink active chef skills into a client's skills dir");
+    println!("                           (target: claude_code, cursor, codex, codeium, windsurf, aider, zed)");
+    println!(
+        "    chef deactivate <name> Move skill to skills-inactive, remove all deploy symlinks"
+    );
+    println!("    chef activate <name>   Move skill from skills-inactive back to skills");
+    println!("    chef delete <name>     Delete a skill from skills/ or skills-inactive/");
+    println!("    chef adopt <target> [--apply]");
+    println!("                           List (or with --apply, adopt) skills found directly");
+    println!("                           inside a client's skills dir into chef");
+    println!("    chef publish <name> <project_dir> [--claude-code] [--codex]");
+    println!("                           Copy a skill into a project repo's .claude/skills/");
+    println!("                           and/or .agents/skills/ (real files, not symlinks) so");
+    println!("                           cloud/web Claude Code and Codex sessions can see it.");
+    println!("                           Defaults to both flags if neither is given.");
     println!();
     println!("  skill status <id> <status>  Set skill status (API TBD)");
     println!("  library add|remove|add-skill|remove-skill  Manage libraries (API TBD)");
@@ -204,9 +219,7 @@ fn print_help() {
 
 fn run_login() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = skill_cookbook_relay::config::Config::load().map_err(|e| e.to_string())?;
-    let auth = std::sync::Arc::new(
-        AuthManager::new(config).map_err(|e| e.to_string())?,
-    );
+    let auth = std::sync::Arc::new(AuthManager::new(config).map_err(|e| e.to_string())?);
     let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
     rt.block_on(async {
         let dev = auth.start_device_flow().await.map_err(|e| e.to_string())?;

@@ -31,10 +31,9 @@ pub fn read_manifest(
     if !path.exists() {
         return Ok(GuestManifest::default());
     }
-    let data = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read manifest: {}", e))?;
-    let manifest: GuestManifest = serde_json::from_str(&data)
-        .map_err(|e| format!("parse manifest: {}", e))?;
+    let data = std::fs::read_to_string(&path).map_err(|e| format!("read manifest: {}", e))?;
+    let manifest: GuestManifest =
+        serde_json::from_str(&data).map_err(|e| format!("parse manifest: {}", e))?;
     Ok(manifest)
 }
 
@@ -45,8 +44,8 @@ pub fn write_manifest(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     std::fs::create_dir_all(guest_dir).map_err(|e| format!("create guest dir: {}", e))?;
     let path = guest_dir.join(MANIFEST_FILENAME);
-    let data = serde_json::to_string_pretty(manifest)
-        .map_err(|e| format!("serialize manifest: {}", e))?;
+    let data =
+        serde_json::to_string_pretty(manifest).map_err(|e| format!("serialize manifest: {}", e))?;
     std::fs::write(&path, data).map_err(|e| format!("write manifest: {}", e))?;
     Ok(())
 }
@@ -59,9 +58,7 @@ pub fn sync_guest_count(
     let guest_dir = config.guest_dir.clone();
     let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
     rt.block_on(async {
-        let auth = Arc::new(
-            AuthManager::new(config.clone()).map_err(|e| e.to_string())?,
-        );
+        let auth = Arc::new(AuthManager::new(config.clone()).map_err(|e| e.to_string())?);
         auth.initialize().await.map_err(|e| e.to_string())?;
         if !auth.is_authenticated() {
             return Err("Not authenticated. Run login first.".into());
@@ -70,7 +67,10 @@ pub fn sync_guest_count(
         let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
         let mut skills = Vec::new();
         for lib in &libraries {
-            let lib_skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            let lib_skills = rss
+                .list_skills(&lib.library_id)
+                .await
+                .map_err(|e| e.to_string())?;
             for s in lib_skills {
                 skills.push(GuestSkillEntry {
                     skill_id: s.skill_id,
@@ -95,9 +95,7 @@ pub fn sync_guest_from_server(
     let guest_dir = config.guest_dir.clone();
     let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
     rt.block_on(async {
-        let auth = Arc::new(
-            AuthManager::new(config.clone()).map_err(|e| e.to_string())?,
-        );
+        let auth = Arc::new(AuthManager::new(config.clone()).map_err(|e| e.to_string())?);
         auth.initialize().await.map_err(|e| e.to_string())?;
         if !auth.is_authenticated() {
             println!("Not authenticated. Run login first. Guest manifest not updated.");
@@ -107,7 +105,10 @@ pub fn sync_guest_from_server(
         let libraries = rss.list_libraries().await.map_err(|e| e.to_string())?;
         let mut skills = Vec::new();
         for lib in &libraries {
-            let lib_skills = rss.list_skills(&lib.library_id).await.map_err(|e| e.to_string())?;
+            let lib_skills = rss
+                .list_skills(&lib.library_id)
+                .await
+                .map_err(|e| e.to_string())?;
             for s in lib_skills {
                 skills.push(GuestSkillEntry {
                     skill_id: s.skill_id,

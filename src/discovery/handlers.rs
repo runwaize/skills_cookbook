@@ -1,17 +1,12 @@
 //! HTTP handlers for discovery endpoints.
 
 use super::{
-    build_skill_zip, discover_apps_impl, resolve_client_path, resolve_skill_md_path, scan_path_impl,
-    ImportRequest, ImportResponse, ImportResult, ScanRequest, ScanResponse,
+    build_skill_zip, discover_apps_impl, resolve_client_path, resolve_skill_md_path,
+    scan_path_impl, ImportRequest, ImportResponse, ImportResult, ScanRequest, ScanResponse,
 };
 use crate::bridge::handlers::BridgeState;
 use crate::studio_client::StudioClient;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use std::path::Path;
 use std::sync::Arc;
 

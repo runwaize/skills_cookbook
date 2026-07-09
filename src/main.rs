@@ -9,13 +9,17 @@ mod config;
 mod crypto;
 mod discovery;
 mod error;
+mod github_import;
 mod guest_manifest;
 mod mcp;
 mod relay;
 mod rss_client;
+mod security_review;
 mod skill_db;
+mod skill_ops;
 mod studio_client;
 mod types;
+mod usage;
 mod variables;
 
 use anyhow::Result;
@@ -57,7 +61,10 @@ impl WebSource {
 // ===== Existing commands =====
 
 #[tauri::command]
-async fn pick_folder(app: tauri::AppHandle, title: Option<String>) -> Result<Option<String>, String> {
+async fn pick_folder(
+    app: tauri::AppHandle,
+    title: Option<String>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog()
@@ -66,8 +73,7 @@ async fn pick_folder(app: tauri::AppHandle, title: Option<String>) -> Result<Opt
         .pick_folder(move |folder| {
             let _ = tx.send(folder.map(|p| p.to_string()));
         });
-    rx.await
-        .map_err(|e| format!("dialog error: {}", e))
+    rx.await.map_err(|e| format!("dialog error: {}", e))
 }
 
 #[tauri::command]
@@ -116,9 +122,7 @@ async fn wipe_all_data(state: tauri::State<'_, Arc<RelayState>>) -> Result<(), S
 // ===== New commands for Local UI =====
 
 #[tauri::command]
-async fn get_config(
-    state: tauri::State<'_, Arc<RelayState>>,
-) -> Result<types::AppConfig, String> {
+async fn get_config(state: tauri::State<'_, Arc<RelayState>>) -> Result<types::AppConfig, String> {
     let cfg = state.config.read();
     let settings_dir = config::Config::base_dir()
         .map(|p| p.to_string_lossy().to_string())
@@ -132,7 +136,55 @@ async fn get_config(
         workspace_id: cfg.workspace_id.clone(),
         mcp_server_port: cfg.mcp_server_port,
         bridge_port: cfg.bridge_port,
+        managed_client_ids: cfg.managed_client_ids.clone(),
+        default_review_cli: cfg.default_review_cli.clone(),
     })
+}
+
+/// List chef skill names from `chef_dir/skills` (directory names, skipping
+/// dotfiles). Shared by `get_skill_usage` and `resync_skill_usage` so the
+/// listing logic isn't duplicated between the two commands.
+fn list_chef_skill_names(state: &RelayState) -> Result<Vec<String>, String> {
+    let cfg = state.config.read();
+    let chef_skills_dir = cfg.chef_dir.join("skills");
+    drop(cfg);
+
+    let mut names = Vec::new();
+    if chef_skills_dir.exists() {
+        let entries = std::fs::read_dir(&chef_skills_dir).map_err(|e| e.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+
+#[tauri::command]
+async fn get_skill_usage(
+    state: tauri::State<'_, Arc<RelayState>>,
+    days: u32,
+) -> Result<Vec<usage::UsageEvent>, String> {
+    let names = list_chef_skill_names(&state)?;
+    let since = chrono::Utc::now() - chrono::Duration::days(days as i64);
+    usage::synced_events(&state.skill_db, &names, since).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn resync_skill_usage(
+    state: tauri::State<'_, Arc<RelayState>>,
+    days: u32,
+) -> Result<Vec<usage::UsageEvent>, String> {
+    let names = list_chef_skill_names(&state)?;
+    let since = chrono::Utc::now() - chrono::Duration::days(days as i64);
+    usage::force_resync(&state.skill_db, &names, since).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -173,6 +225,8 @@ async fn update_config(
         workspace_id: cfg.workspace_id.clone(),
         mcp_server_port: cfg.mcp_server_port,
         bridge_port: cfg.bridge_port,
+        managed_client_ids: cfg.managed_client_ids.clone(),
+        default_review_cli: cfg.default_review_cli.clone(),
     };
     Ok(result)
 }
@@ -198,12 +252,13 @@ async fn move_settings_dir(
             workspace_id: cfg.workspace_id.clone(),
             mcp_server_port: cfg.mcp_server_port,
             bridge_port: cfg.bridge_port,
+            managed_client_ids: cfg.managed_client_ids.clone(),
+            default_review_cli: cfg.default_review_cli.clone(),
         });
     }
 
     // Create new dir and copy contents
-    std::fs::create_dir_all(&new_path)
-        .map_err(|e| format!("create new settings dir: {}", e))?;
+    std::fs::create_dir_all(&new_path).map_err(|e| format!("create new settings dir: {}", e))?;
     copy_dir_recursive(&old_dir, &new_path)?;
 
     // If chef/cook dirs were inside the old settings dir, update them to new location
@@ -221,8 +276,8 @@ async fn move_settings_dir(
         }
         // Save config to the NEW location (it was already copied, now overwrite with updated paths)
         let config_path = new_path.join("config.toml");
-        let content = toml::to_string_pretty(&*cfg)
-            .map_err(|e| format!("serialize config: {}", e))?;
+        let content =
+            toml::to_string_pretty(&*cfg).map_err(|e| format!("serialize config: {}", e))?;
         std::fs::write(&config_path, content)
             .map_err(|e| format!("write config to new dir: {}", e))?;
     }
@@ -244,6 +299,8 @@ async fn move_settings_dir(
         workspace_id: cfg.workspace_id.clone(),
         mcp_server_port: cfg.mcp_server_port,
         bridge_port: cfg.bridge_port,
+        managed_client_ids: cfg.managed_client_ids.clone(),
+        default_review_cli: cfg.default_review_cli.clone(),
     })
 }
 
@@ -255,6 +312,32 @@ async fn set_user_role(
     {
         let mut cfg = state.config.write();
         cfg.user_role = role;
+        cfg.save().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_managed_clients(
+    state: tauri::State<'_, Arc<RelayState>>,
+    ids: Vec<String>,
+) -> Result<(), String> {
+    {
+        let mut cfg = state.config.write();
+        cfg.managed_client_ids = ids;
+        cfg.save().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_default_review_cli(
+    state: tauri::State<'_, Arc<RelayState>>,
+    cli: Option<String>,
+) -> Result<(), String> {
+    {
+        let mut cfg = state.config.write();
+        cfg.default_review_cli = cli;
         cfg.save().map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -282,17 +365,12 @@ async fn switch_ui_mode(
                     env!("CARGO_PKG_VERSION")
                 );
                 let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
-                window
-                    .navigate(parsed)
-                    .map_err(|e| e.to_string())?;
+                window.navigate(parsed).map_err(|e| e.to_string())?;
             }
             UiMode::Local => {
                 // Navigate back to local UI
-                let parsed =
-                    tauri::Url::parse("tauri://localhost").map_err(|e| e.to_string())?;
-                window
-                    .navigate(parsed)
-                    .map_err(|e| e.to_string())?;
+                let parsed = tauri::Url::parse("tauri://localhost").map_err(|e| e.to_string())?;
+                window.navigate(parsed).map_err(|e| e.to_string())?;
             }
         }
     }
@@ -304,44 +382,79 @@ async fn list_local_skills(
     state: tauri::State<'_, Arc<RelayState>>,
 ) -> Result<Vec<types::LocalSkill>, String> {
     let cfg = state.config.read();
-    let skills_dir = cfg.chef_dir.join("skills");
+    let chef_dir = cfg.chef_dir.clone();
     drop(cfg);
-    list_local_skills_impl(&skills_dir, &state.skill_db).map_err(|e| e.to_string())
+    list_local_skills_impl(&chef_dir, &state.skill_db).map_err(|e| e.to_string())
 }
 
 fn list_local_skills_impl(
-    skills_dir: &Path,
+    chef_dir: &Path,
     skill_db: &skill_db::SkillDb,
 ) -> std::result::Result<Vec<types::LocalSkill>, String> {
-    if !skills_dir.exists() {
-        return Ok(vec![]);
-    }
+    let chef_skills_dir = chef_dir.join("skills");
     let mut result = Vec::new();
-    let entries = std::fs::read_dir(skills_dir).map_err(|e| e.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if !entry.path().is_dir() {
+    for (dir, active) in [
+        (chef_skills_dir.clone(), true),
+        (chef_dir.join("skills-inactive"), false),
+    ] {
+        if !dir.exists() {
             continue;
         }
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
+        let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            let entry_path = entry.path();
+            let has_skill_md = entry_path.join("SKILL.md").exists();
+            let path = entry_path.to_string_lossy().to_string();
+            let targets = skill_ops::deployed_targets(&entry_path, &chef_skills_dir);
+
+            // Join with SQLite metadata (auto-create if missing)
+            let mut meta = skill_db.ensure_exists(&name).map_err(|e| e.to_string())?;
+
+            // Self-healing backfill: skills added before description-on-import existed
+            // (or added via the CLI/adopt flow, which also never set it) would otherwise
+            // show "No description yet." forever. Read it from SKILL.md once and persist
+            // it, same as a fresh import would have.
+            if meta.description.as_deref().unwrap_or("").is_empty() && has_skill_md {
+                if let Some(desc) = skill_description_from_md(&entry_path.join("SKILL.md")) {
+                    skill_db
+                        .set_description(&name, &desc)
+                        .map_err(|e| e.to_string())?;
+                    meta.description = Some(desc);
+                }
+            }
+
+            // "Updated" is sourced from the folder's real filesystem mtime, not the
+            // DB-tracked timestamp: the DB only gets bumped on specific app actions
+            // (metadata edits), so it goes stale the moment a skill's files are
+            // touched any other way (the built-in file editor, an external editor,
+            // git). The folder's actual mtime can't go stale -- it's ground truth.
+            let updated_at = skill_ops::folder_last_modified(&entry_path)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_else(|| meta.updated_at.clone());
+
+            result.push(types::LocalSkill {
+                name,
+                has_skill_md,
+                path,
+                status: meta.status,
+                version: meta.version,
+                tags: meta.tags,
+                description: meta.description,
+                active,
+                targets,
+                source: meta.source,
+                created_at: meta.created_at,
+                updated_at,
+            });
         }
-        let has_skill_md = entry.path().join("SKILL.md").exists();
-        let path = entry.path().to_string_lossy().to_string();
-
-        // Join with SQLite metadata (auto-create if missing)
-        let meta = skill_db.ensure_exists(&name).map_err(|e| e.to_string())?;
-
-        result.push(types::LocalSkill {
-            name,
-            has_skill_md,
-            path,
-            status: meta.status,
-            version: meta.version,
-            tags: meta.tags,
-            description: meta.description,
-        });
     }
     result.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(result)
@@ -371,14 +484,21 @@ async fn list_remote_skills(
     Ok(result)
 }
 
+/// Read the `description:`/`title:` frontmatter field straight out of a just-copied
+/// SKILL.md so newly imported skills aren't left with a blank description until the
+/// user manually fills one in via the metadata editor.
+fn skill_description_from_md(skill_md_path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(skill_md_path).ok()?;
+    let (meta, _) = discovery::extract_frontmatter(&content);
+    meta.get("description")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 #[tauri::command]
-async fn add_skill(
-    state: tauri::State<'_, Arc<RelayState>>,
-    path: String,
-) -> Result<(), String> {
+async fn add_skill(state: tauri::State<'_, Arc<RelayState>>, path: String) -> Result<(), String> {
     let cfg = state.config.read();
-    let skill_md_path =
-        discovery::resolve_skill_md_path(&path).map_err(|e| e.to_string())?;
+    let skill_md_path = discovery::resolve_skill_md_path(&path).map_err(|e| e.to_string())?;
     let skill_name = skill_md_path
         .parent()
         .and_then(|p| p.file_name())
@@ -386,12 +506,144 @@ async fn add_skill(
         .unwrap_or("skill")
         .to_string();
     let dest_dir = cfg.chef_dir.join("skills").join(&skill_name);
-    std::fs::create_dir_all(&dest_dir).map_err(|e| format!("create dest dir: {}", e))?;
-    let dest_path = dest_dir.join("SKILL.md");
-    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| e.to_string())?;
-    std::fs::write(&dest_path, content).map_err(|e| format!("write: {}", e))?;
+    let src_dir = skill_md_path
+        .parent()
+        .ok_or_else(|| format!("Invalid skill path: {}", skill_md_path.display()))?;
+    skill_ops::copy_dir_all(src_dir, &dest_dir).map_err(|e| e.to_string())?;
+    state
+        .skill_db
+        .set_source(&skill_name, "adapted")
+        .map_err(|e| e.to_string())?;
+    if let Some(desc) = skill_description_from_md(&dest_dir.join("SKILL.md")) {
+        state
+            .skill_db
+            .set_description(&skill_name, &desc)
+            .map_err(|e| e.to_string())?;
+    }
     git_add_commit_impl(&cfg.chef_dir, &format!("Add skill: {}", skill_name))?;
     Ok(())
+}
+
+#[tauri::command]
+async fn activate_skill(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+) -> Result<(), String> {
+    let chef_dir = state.config.read().chef_dir.clone();
+    skill_ops::activate_skill(&chef_dir, &name)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn deactivate_skill(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+) -> Result<(), String> {
+    let chef_dir = state.config.read().chef_dir.clone();
+    skill_ops::deactivate_skill(&chef_dir, &name)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_skill(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+) -> Result<(), String> {
+    let chef_dir = state.config.read().chef_dir.clone();
+    skill_ops::delete_skill(&chef_dir, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_skill_targets(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    targets: Vec<String>,
+) -> Result<(), String> {
+    let chef_dir = state.config.read().chef_dir.clone();
+    let chef_skills_dir = chef_dir.join("skills");
+    let active_dir = chef_skills_dir.join(&name);
+    let skill_dir = if active_dir.exists() {
+        active_dir
+    } else {
+        let inactive_dir = chef_dir.join("skills-inactive").join(&name);
+        if inactive_dir.exists() {
+            inactive_dir
+        } else {
+            return Err(format!("Skill '{}' not found", name));
+        }
+    };
+    skill_ops::set_skill_targets(&skill_dir, &chef_skills_dir, &targets).map_err(|e| e.to_string())
+}
+
+/// Copy a skill into a target project repo (`.claude/skills/` and/or `.agents/skills/`)
+/// as a real, portable file tree so cloud-hosted Claude Code / Codex sessions (which
+/// only ever see what's checked into the repo they clone) can discover it.
+#[tauri::command]
+async fn publish_skill_to_project(
+    state: tauri::State<'_, Arc<RelayState>>,
+    name: String,
+    project_dir: String,
+    targets: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let chef_dir = state.config.read().chef_dir.clone();
+    let active_dir = chef_dir.join("skills").join(&name);
+    let skill_dir = if active_dir.exists() {
+        active_dir
+    } else {
+        let inactive_dir = chef_dir.join("skills-inactive").join(&name);
+        if inactive_dir.exists() {
+            inactive_dir
+        } else {
+            return Err(format!("Skill '{}' not found", name));
+        }
+    };
+    skill_ops::publish_skill_to_project(&skill_dir, Path::new(&project_dir), &targets)
+        .map_err(|e| e.to_string())
+}
+
+/// List every skill currently published into a project repo (`.claude/skills/` and/or
+/// `.agents/skills/`), with which target(s) each is present in.
+#[tauri::command]
+async fn list_project_skills(
+    project_dir: String,
+) -> Result<Vec<skill_ops::ProjectSkillEntry>, String> {
+    skill_ops::list_project_skills(Path::new(&project_dir)).map_err(|e| e.to_string())
+}
+
+/// Remove a skill previously published into a project repo for the given target(s).
+#[tauri::command]
+async fn unpublish_skill_from_project(
+    project_dir: String,
+    name: String,
+    targets: Vec<String>,
+) -> Result<Vec<String>, String> {
+    skill_ops::unpublish_skill_from_project(Path::new(&project_dir), &name, &targets)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn adopt_scan(client_id: String) -> Result<Vec<skill_ops::AdoptCandidate>, String> {
+    skill_ops::adopt_scan(&client_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn adopt_apply(
+    state: tauri::State<'_, Arc<RelayState>>,
+    client_id: String,
+    names: Vec<String>,
+) -> Result<usize, String> {
+    let chef_dir = state.config.read().chef_dir.clone();
+    let adopted =
+        skill_ops::adopt_apply(&chef_dir, &client_id, &names).map_err(|e| e.to_string())?;
+    for name in &adopted {
+        state
+            .skill_db
+            .set_source(name, "downloaded")
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(adopted.len())
 }
 
 #[tauri::command]
@@ -416,7 +668,10 @@ async fn write_skill_content(
 }
 
 #[tauri::command]
-async fn open_skill_in_editor(name: String, state: tauri::State<'_, Arc<RelayState>>) -> Result<(), String> {
+async fn open_skill_in_editor(
+    name: String,
+    state: tauri::State<'_, Arc<RelayState>>,
+) -> Result<(), String> {
     let cfg = state.config.read();
     let path = cfg.chef_dir.join("skills").join(&name).join("SKILL.md");
     drop(cfg);
@@ -511,29 +766,49 @@ async fn scan_for_skills(
             path: s.path.clone(),
             already_in_chef: existing.contains(&s.name),
             source_agent: s.client_id,
+            display_path: None,
         })
         .collect())
 }
 
+/// Import scanned skills (from either the local-folder Discover flow or a GitHub
+/// repo scan) into `chef_dir/skills`, tagging each with a provenance string in
+/// `skill_db`. `source` is a fully-formed tag (e.g. `"github:owner/repo"`); when not
+/// given, imports fall back to the generic `"discovered"` tag so they're still
+/// distinguishable in the skill list from skills added other ways (`"adapted"` via
+/// `add_skill`, `"downloaded"` via `adopt_apply`, etc.) rather than being left
+/// untagged.
 #[tauri::command]
 async fn import_skills(
     state: tauri::State<'_, Arc<RelayState>>,
     paths: Vec<String>,
+    names: Option<Vec<String>>,
+    source: Option<String>,
 ) -> Result<usize, String> {
     let cfg = state.config.read();
     let chef_skills_dir = cfg.chef_dir.join("skills");
     let mut added = Vec::new();
-    for path_str in &paths {
+    for (i, path_str) in paths.iter().enumerate() {
         let skill_md = Path::new(path_str);
         let src_dir = match skill_md.parent() {
             Some(d) => d,
             None => continue,
         };
-        let name = src_dir
+        // Prefer the caller-supplied name (already derived from SKILL.md frontmatter
+        // during scan, e.g. via derive_skill_name) over the source directory's
+        // basename -- for a repo-root SKILL.md cloned into a tempdir, src_dir IS the
+        // tempdir, so its basename is a random string, not the skill's real name.
+        // Still sanitized here since the name may originate from an untrusted repo.
+        let fallback_name = src_dir
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("skill")
             .to_string();
+        let name = names
+            .as_ref()
+            .and_then(|n| n.get(i))
+            .and_then(|s| skill_ops::sanitize_skill_name(s))
+            .unwrap_or(fallback_name);
         let dest_dir = chef_skills_dir.join(&name);
         copy_dir_recursive(src_dir, &dest_dir).map_err(|e| e.to_string())?;
         added.push(name);
@@ -544,8 +819,71 @@ async fn import_skills(
             n => format!("Add {} skills", n),
         };
         git_add_commit_impl(&cfg.chef_dir, &msg)?;
+        let tag = source.as_deref().unwrap_or("discovered");
+        for name in &added {
+            state
+                .skill_db
+                .set_source(name, tag)
+                .map_err(|e| e.to_string())?;
+            if let Some(desc) =
+                skill_description_from_md(&chef_skills_dir.join(name).join("SKILL.md"))
+            {
+                state
+                    .skill_db
+                    .set_description(name, &desc)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
     }
     Ok(added.len())
+}
+
+/// Derive the `owner/repo` slug from a GitHub-style URL (same URL passed to
+/// `scan_github_repo`), for building the `"github:owner/repo"` provenance tag passed
+/// to `import_skills`'s `source` param. Returns `None` if the URL doesn't parse.
+#[tauri::command]
+async fn github_repo_slug(url: String) -> Result<Option<String>, String> {
+    Ok(github_import::repo_slug_from_url(&url))
+}
+
+/// Shallow-clone a GitHub (or other git-hosted) repo URL and scan it for SKILL.md
+/// files, reusing the same discovery logic as the local-folder scan. Returned paths
+/// point into a tempdir that is intentionally left in place (see
+/// `github_import::clone_and_scan_repo`) so they stay valid for a following
+/// `import_skills` call -- use `github_repo_slug(url)` to build the
+/// `source: "github:owner/repo"` tag for that call.
+#[tauri::command]
+async fn scan_github_repo(
+    state: tauri::State<'_, Arc<RelayState>>,
+    url: String,
+) -> Result<Vec<types::ScannedSkillInfo>, String> {
+    let chef_skills_dir = state.config.read().chef_dir.join("skills");
+    tokio::task::spawn_blocking(move || github_import::clone_and_scan_repo(&url, &chef_skills_dir))
+        .await
+        .map_err(|e| format!("scan_github_repo task failed: {}", e))?
+        .map_err(|e| e.to_string())
+}
+
+/// Run a non-interactive AI security review of a skill using the named CLI
+/// (`"claude_code"` or `"codex"`) before it's imported/trusted. See
+/// `security_review::run_security_review` for the exact prompt and CLI invocation.
+///
+/// `skill_path` accepts either a skill's SKILL.md file path (what `scan_for_skills` /
+/// `scan_github_repo` produce, same as `import_skills` accepts) or the skill
+/// directory itself -- `run_security_review` resolves it via
+/// `security_review::resolve_skill_dir`, matching how `import_skills` derives the
+/// skill dir from the same scanned path.
+#[tauri::command]
+async fn run_skill_security_review(
+    skill_path: String,
+    cli: String,
+) -> Result<security_review::SecurityReview, String> {
+    tokio::task::spawn_blocking(move || {
+        security_review::run_security_review(&cli, Path::new(&skill_path))
+    })
+    .await
+    .map_err(|e| format!("run_skill_security_review task failed: {}", e))?
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -557,9 +895,7 @@ async fn get_guest_manifest(
 }
 
 #[tauri::command]
-async fn sync_guest(
-    state: tauri::State<'_, Arc<RelayState>>,
-) -> Result<usize, String> {
+async fn sync_guest(state: tauri::State<'_, Arc<RelayState>>) -> Result<usize, String> {
     // Sync guest manifest from server
     let cfg = state.config.read().clone();
     let libraries = state.list_libraries().await.map_err(|e| e.to_string())?;
@@ -652,11 +988,7 @@ async fn run_doctor(
         } else {
             DiagnosticStatus::Warning
         },
-        message: cfg
-            .workspace_id
-            .as_deref()
-            .unwrap_or("Not set")
-            .into(),
+        message: cfg.workspace_id.as_deref().unwrap_or("Not set").into(),
     });
 
     // Auth
@@ -889,10 +1221,18 @@ async fn update_skill_meta(
     version: String,
     tags: Vec<String>,
     description: Option<String>,
+    source: String,
 ) -> Result<skill_db::SkillMeta, String> {
     state
         .skill_db
-        .upsert(&name, &status, &version, &tags, description.as_deref())
+        .upsert(
+            &name,
+            &status,
+            &version,
+            &tags,
+            description.as_deref(),
+            &source,
+        )
         .map_err(|e| e.to_string())?;
     state
         .skill_db
@@ -942,12 +1282,15 @@ fn existing_skill_names(chef_skills_dir: &Path) -> std::collections::HashSet<Str
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::result::Result<(), String> {
     std::fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {}", dst.display(), e))?;
-    for entry in
-        std::fs::read_dir(src).map_err(|e| format!("read dir {}: {}", src.display(), e))?
-    {
+    for entry in std::fs::read_dir(src).map_err(|e| format!("read dir {}: {}", src.display(), e))? {
         let entry = entry.map_err(|e| e.to_string())?;
         let ft = entry.file_type().map_err(|e| e.to_string())?;
         if ft.is_symlink() {
+            continue;
+        }
+        if entry.file_name() == ".git" {
+            // GitHub-imported skills are cloned into a tempdir; don't nest that
+            // clone's own git repo inside the chef dir's git repo.
             continue;
         }
         let src_path = entry.path();
@@ -956,7 +1299,12 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::result::Result<(), String>
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
             std::fs::copy(&src_path, &dst_path).map_err(|e| {
-                format!("copy {} -> {}: {}", src_path.display(), dst_path.display(), e)
+                format!(
+                    "copy {} -> {}: {}",
+                    src_path.display(),
+                    dst_path.display(),
+                    e
+                )
             })?;
         }
     }
@@ -1021,10 +1369,23 @@ async fn main() -> Result<()> {
             update_config,
             move_settings_dir,
             set_user_role,
+            set_managed_clients,
+            set_default_review_cli,
+            get_skill_usage,
+            resync_skill_usage,
             switch_ui_mode,
             list_local_skills,
             list_remote_skills,
             add_skill,
+            activate_skill,
+            deactivate_skill,
+            delete_skill,
+            set_skill_targets,
+            publish_skill_to_project,
+            list_project_skills,
+            unpublish_skill_from_project,
+            adopt_scan,
+            adopt_apply,
             read_skill_content,
             write_skill_content,
             open_skill_in_editor,
@@ -1032,6 +1393,9 @@ async fn main() -> Result<()> {
             discover_agents,
             scan_for_skills,
             import_skills,
+            github_repo_slug,
+            scan_github_repo,
+            run_skill_security_review,
             get_guest_manifest,
             sync_guest,
             run_doctor,
@@ -1091,39 +1455,35 @@ async fn main() -> Result<()> {
                 });
             }
 
-            // Determine initial URL based on ui_mode
-            let webview_url = match config.ui_mode {
-                UiMode::Local => {
-                    // In dev, the Vite dev server is running at devUrl; in production,
-                    // the local-ui/dist is served via the custom protocol.
-                    WebviewUrl::App("index.html".into())
-                }
-                UiMode::Online => {
-                    let base_url = web_source.url.trim_end_matches('/');
-                    let initial_path = relay_state
-                        .is_authenticated()
-                        .then(|| "/inbox".to_string())
-                        .unwrap_or_else(|| "/account/login".to_string());
-                    let web_url = format!(
-                        "{}{}?tauri_version={}",
-                        base_url,
-                        initial_path,
-                        env!("CARGO_PKG_VERSION"),
-                    );
-                    let url = tauri::Url::parse(&web_url).unwrap_or_else(|_| {
-                        tauri::Url::parse("https://skills.runwaize.com").unwrap()
-                    });
-                    WebviewUrl::External(url)
-                }
+            // Determine initial URL based on ui_mode. Online mode is only honored at
+            // startup if already authenticated — this app is standalone-first, so a
+            // saved ui_mode=Online preference (e.g. from a prior explicit switch)
+            // must never surface a cold login wall on launch. Users who want the
+            // online experience switch to it explicitly, in-session, from Settings.
+            let webview_url = if matches!(config.ui_mode, UiMode::Online)
+                && relay_state.is_authenticated()
+            {
+                let base_url = web_source.url.trim_end_matches('/');
+                let web_url = format!(
+                    "{}/inbox?tauri_version={}",
+                    base_url,
+                    env!("CARGO_PKG_VERSION"),
+                );
+                let url = tauri::Url::parse(&web_url)
+                    .unwrap_or_else(|_| tauri::Url::parse("https://skills.runwaize.com").unwrap());
+                WebviewUrl::External(url)
+            } else {
+                // In dev, the Vite dev server is running at devUrl; in production,
+                // the local-ui/dist is served via the custom protocol.
+                WebviewUrl::App("index.html".into())
             };
 
-            let mut builder =
-                tauri::WebviewWindowBuilder::new(app, "main", webview_url)
-                    .title("Skill Cookbook")
-                    .inner_size(1200.0, 800.0)
-                    .resizable(true)
-                    .decorations(true)
-                    .visible(true);
+            let mut builder = tauri::WebviewWindowBuilder::new(app, "main", webview_url)
+                .title("Skill Cookbook")
+                .inner_size(1200.0, 800.0)
+                .resizable(true)
+                .decorations(true)
+                .visible(true);
 
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
@@ -1154,10 +1514,8 @@ async fn main() -> Result<()> {
                 let about_item =
                     MenuItemBuilder::with_id("about", "About Skill Cookbook").build(app)?;
                 let show_item = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
-                let settings_item =
-                    MenuItemBuilder::with_id("settings", "Settings").build(app)?;
-                let local_ui_item =
-                    MenuItemBuilder::with_id("ui_local", "Local UI").build(app)?;
+                let settings_item = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
+                let local_ui_item = MenuItemBuilder::with_id("ui_local", "Local UI").build(app)?;
                 let online_ui_item =
                     MenuItemBuilder::with_id("ui_online", "Online UI").build(app)?;
                 let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;

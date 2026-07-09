@@ -14,7 +14,10 @@ mod tests {
         for artifact_type in types {
             let json = serde_json::to_string(&artifact_type).unwrap();
             let deserialized: ArtifactType = serde_json::from_str(&json).unwrap();
-            assert_eq!(format!("{:?}", artifact_type), format!("{:?}", deserialized));
+            assert_eq!(
+                format!("{:?}", artifact_type),
+                format!("{:?}", deserialized)
+            );
         }
     }
 

@@ -28,27 +28,37 @@ pub struct SkillStatusArgs {
     pub status: String,
 }
 
-pub fn run_library_add(_args: &LibraryAddArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_library_add(
+    _args: &LibraryAddArgs,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("library add: API not yet available (backend endpoint TBD)");
     Ok(())
 }
 
-pub fn run_library_remove(_args: &LibraryRemoveArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_library_remove(
+    _args: &LibraryRemoveArgs,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("library remove: API not yet available (backend endpoint TBD)");
     Ok(())
 }
 
-pub fn run_library_add_skill(_args: &LibraryAddSkillArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_library_add_skill(
+    _args: &LibraryAddSkillArgs,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("library add-skill: API not yet available (backend endpoint TBD)");
     Ok(())
 }
 
-pub fn run_library_remove_skill(_args: &LibraryRemoveSkillArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_library_remove_skill(
+    _args: &LibraryRemoveSkillArgs,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("library remove-skill: API not yet available (backend endpoint TBD)");
     Ok(())
 }
 
-pub fn run_skill_status(_args: &SkillStatusArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_skill_status(
+    _args: &SkillStatusArgs,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("skill status: API not yet available (backend endpoint TBD)");
     Ok(())
 }

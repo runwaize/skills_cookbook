@@ -11,7 +11,10 @@ pub struct DoctorArgs {
 }
 
 /// Run doctor and return structured diagnostics (for Tauri UI).
-pub fn run_doctor_structured() -> Result<Vec<skill_cookbook_relay::types::DiagnosticCheck>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_doctor_structured() -> Result<
+    Vec<skill_cookbook_relay::types::DiagnosticCheck>,
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     use skill_cookbook_relay::types::{DiagnosticCheck, DiagnosticStatus};
     let mut checks = Vec::new();
 

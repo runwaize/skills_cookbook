@@ -48,10 +48,7 @@ impl VariableResolver {
     }
 
     /// Returns names of required variables that cannot be resolved (no secret values).
-    pub async fn missing_required_variables(
-        &self,
-        schemas: &[VariableSchema],
-    ) -> Vec<String> {
+    pub async fn missing_required_variables(&self, schemas: &[VariableSchema]) -> Vec<String> {
         let mut missing = Vec::new();
         for schema in schemas {
             if !schema.required {

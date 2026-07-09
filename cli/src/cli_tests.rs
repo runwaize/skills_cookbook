@@ -43,7 +43,10 @@ mod tests {
         let guest = temp.path().join("guest");
         std::fs::create_dir_all(&chef).unwrap();
         std::fs::create_dir_all(&guest).unwrap();
-        let _ = std::process::Command::new("git").args(["init"]).current_dir(&chef).status();
+        let _ = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&chef)
+            .status();
         let mut config = skill_cookbook_relay::config::Config::default();
         config.chef_dir = chef.clone();
         config.guest_dir = guest.clone();

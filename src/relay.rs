@@ -162,7 +162,8 @@ impl RelayState {
         if config_guard.exposed_libraries.is_empty() {
             return Ok(libraries);
         }
-        let allowlist: std::collections::HashSet<_> = config_guard.exposed_libraries.iter().collect();
+        let allowlist: std::collections::HashSet<_> =
+            config_guard.exposed_libraries.iter().collect();
         Ok(libraries
             .into_iter()
             .filter(|lib| allowlist.contains(&lib.library_id))

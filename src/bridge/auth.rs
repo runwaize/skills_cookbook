@@ -16,8 +16,7 @@ impl BridgeAuth {
     pub fn new(session_token: String, allowed_origin: Option<String>) -> Self {
         Self {
             session_token,
-            allowed_origin: allowed_origin
-                .unwrap_or_else(|| DEFAULT_ALLOWED_ORIGIN.to_string()),
+            allowed_origin: allowed_origin.unwrap_or_else(|| DEFAULT_ALLOWED_ORIGIN.to_string()),
         }
     }
 

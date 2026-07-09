@@ -20,7 +20,10 @@ pub struct GuestManifest {
 }
 
 /// Write manifest to guest dir.
-pub fn write_guest_manifest(guest_dir: &Path, manifest: &GuestManifest) -> crate::error::Result<()> {
+pub fn write_guest_manifest(
+    guest_dir: &Path,
+    manifest: &GuestManifest,
+) -> crate::error::Result<()> {
     std::fs::create_dir_all(guest_dir)
         .map_err(|e| crate::error::RelayError::Config(format!("create guest dir: {}", e)))?;
     let path = guest_dir.join(MANIFEST_FILENAME);
